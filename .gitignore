@@ -1,0 +1,10 @@
+.next/
+node_modules/
+data/
+.env
+.env.local
+*.log
+.server.pid
+.server.log
+tmp/
+.venv/

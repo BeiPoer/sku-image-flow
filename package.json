@@ -1,0 +1,10 @@
+{
+  "name": "sku-image-flow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-sqlite server.mjs",
+    "dev": "node --experimental-sqlite server.mjs"
+  }
+}
