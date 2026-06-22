@@ -339,7 +339,7 @@ function sendHtml(res, html) {
   res.end(body);
 }
 
-async function serveFile(res, filePath, contentType) {
+async function serveFile(res, filePath, contentType, cacheControl) {
   if (!existsSync(filePath)) {
     res.writeHead(404);
     res.end("Not found");
@@ -349,7 +349,7 @@ async function serveFile(res, filePath, contentType) {
   res.writeHead(200, {
     "Content-Type": contentType || inferMime(filePath),
     "Content-Length": info.size,
-    "Cache-Control": "private, max-age=3600"
+    "Cache-Control": cacheControl || "private, max-age=3600"
   });
   createReadStream(filePath).pipe(res);
 }
@@ -1189,7 +1189,7 @@ function retryImagesStrip(nodeKey) {
   const imgs = state.retryImages[nodeKey] || [];
   if (!imgs.length) return "";
   return '<div class="retry-imgs">' + imgs.map((item, index) =>
-    '<div class="retry-thumb"><img src="' + esc(item.url) + '" alt="' + esc(item.name) + '" />' +
+    '<div class="retry-thumb"><img class="zoomable" data-preview-src="' + esc(item.url) + '" data-preview-title="' + esc(item.name) + '" src="' + esc(item.url) + '" alt="' + esc(item.name) + '" />' +
       '<button type="button" class="retry-thumb-x" data-retry-rm data-node="' + esc(nodeKey) + '" data-idx="' + index + '" title="移除">' + icon("close", 12) + '</button>' +
     '</div>'
   ).join("") + '</div>';
@@ -1236,8 +1236,10 @@ function renderNode(data, node, list, sourceCount, selectedMain) {
       <div class="node-toolbar">
         <div class="retry-row" data-retry-drop="\${esc(node.key)}">
           <label for="retry-\${esc(node.key)}">重跑修正重点（可留空，可在下方粘贴或拖拽图片，最多 5 张）</label>
-          <textarea id="retry-\${esc(node.key)}" data-retry data-node="\${esc(node.key)}" placeholder="例如：主体更大、减少文字、背景更干净；可直接粘贴(Ctrl+V)或拖拽图片到此处">\${esc(state.retryHints[node.key] || "")}</textarea>
-          \${retryImagesStrip(node.key)}
+          <div class="retry-input">
+            \${retryImagesStrip(node.key)}
+            <textarea id="retry-\${esc(node.key)}" data-retry data-node="\${esc(node.key)}" placeholder="例如：主体更大、减少文字、背景更干净；可直接粘贴(Ctrl+V)或拖拽图片到此处">\${esc(state.retryHints[node.key] || "")}</textarea>
+          </div>
         </div>
         \${body}
       </div>
@@ -1546,7 +1548,7 @@ window.addEventListener("keydown", (event) => {
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    if (url.pathname === "/app.css") return serveFile(res, path.join(publicDir, "app.css"), "text/css; charset=utf-8");
+    if (url.pathname === "/app.css") return serveFile(res, path.join(publicDir, "app.css"), "text/css; charset=utf-8", "no-cache");
     if (url.pathname === "/app.js") {
       const body = Buffer.from(appJs);
       res.writeHead(200, { "Content-Type": "text/javascript; charset=utf-8", "Content-Length": body.length });
