@@ -782,6 +782,42 @@ const SKU_ID = window.__SKU_ID__;
 const app = document.getElementById("app");
 const rejectReasons = ["产品不像", "logo 错", "结构错", "文字错误", "主体太小", "背景不合适", "风格不够高级"];
 
+// 轻量 DOM diff：原地更新而非整体替换 innerHTML，
+// 这样未变化的元素（尤其 <img>）会被保留，不会重新加载导致闪烁。
+function morphAttrs(from, to) {
+  const toAttrs = to.attributes;
+  for (let i = 0; i < toAttrs.length; i += 1) {
+    if (from.getAttribute(toAttrs[i].name) !== toAttrs[i].value) from.setAttribute(toAttrs[i].name, toAttrs[i].value);
+  }
+  const fromAttrs = from.attributes;
+  for (let i = fromAttrs.length - 1; i >= 0; i -= 1) {
+    if (!to.hasAttribute(fromAttrs[i].name)) from.removeAttribute(fromAttrs[i].name);
+  }
+}
+function morphNode(from, to) {
+  if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName) { from.replaceWith(to); return; }
+  if (from.nodeType === 3 || from.nodeType === 8) { if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue; return; }
+  if (from.nodeType !== 1) return;
+  morphAttrs(from, to);
+  // 正在输入的输入框：保留其内容，避免光标跳到末尾或打断输入
+  if ((from.nodeName === "TEXTAREA" || from.nodeName === "INPUT") && from === document.activeElement) return;
+  morphChildren(from, to);
+}
+function morphChildren(from, to) {
+  const toChildren = Array.from(to.childNodes);
+  for (let i = 0; i < toChildren.length; i += 1) {
+    const fromChild = from.childNodes[i];
+    if (!fromChild) from.appendChild(toChildren[i]);
+    else morphNode(fromChild, toChildren[i]);
+  }
+  while (from.childNodes.length > toChildren.length) from.removeChild(from.lastChild);
+}
+function paint(html) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  morphChildren(app, tmp);
+}
+
 const ICON = {
   back: 'M19 12H5M12 19l-7-7 7-7',
   download: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
@@ -974,7 +1010,7 @@ function brandBar() {
 
 function renderHome() {
   const skus = state.data?.skus || [];
-  app.innerHTML = \`
+  paint(\`
     \${brandBar()}
     <div class="home-hero">
       <h2>从产品图到整套电商图</h2>
@@ -1009,7 +1045,7 @@ function renderHome() {
         </article>\`).join("") + '</div>'
         : \`<div class="empty"><span class="ic">\${iconImage(26)}</span><p>还没有 SKU，先在上方新建一个吧。</p></div>\`}
     </section>
-    \${toastsHtml()}\`;
+    \${toastsHtml()}\`);
 
   document.getElementById("create-form").onsubmit = async (event) => {
     event.preventDefault();
@@ -1059,7 +1095,7 @@ function renderSku() {
   if (state.activeNode !== "assets" && !data.nodes.some((n) => n.key === state.activeNode)) state.activeNode = "assets";
   const pct = total ? Math.round((selectedCount / total) * 100) : 0;
 
-  app.innerHTML = \`
+  paint(\`
     <header class="appbar">
       <a class="backlink" href="/">\${icon("back", 18)} 返回</a>
       <div class="appbar-title">
@@ -1082,7 +1118,7 @@ function renderSku() {
     </div>
     \${state.aspectOpen ? '<div class="aspect-overlay" data-aspect-close></div>' : ''}
     \${toastsHtml()}
-    \${renderPreview()}\`;
+    \${renderPreview()}\`);
 
   bindSidebar();
   bindContent(data, sourceAssets);
@@ -1306,13 +1342,13 @@ function bindContent(data, sourceAssets) {
     const role = zone.dataset.role;
     const input = zone.querySelector("[data-file]");
     if (input) input.onchange = (e) => setPending(role, e.target.files);
-    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
-    zone.addEventListener("dragleave", () => zone.classList.remove("dragover"));
-    zone.addEventListener("drop", (e) => {
+    zone.ondragover = (e) => { e.preventDefault(); zone.classList.add("dragover"); };
+    zone.ondragleave = () => zone.classList.remove("dragover");
+    zone.ondrop = (e) => {
       e.preventDefault();
       zone.classList.remove("dragover");
       if (e.dataTransfer?.files?.length) setPending(role, e.dataTransfer.files);
-    });
+    };
   }
   for (const btn of document.querySelectorAll("[data-upload]")) {
     btn.onclick = () => uploadFiles(btn.dataset.role);
@@ -1337,14 +1373,14 @@ function bindContent(data, sourceAssets) {
   }
   for (const zone of document.querySelectorAll("[data-retry-drop]")) {
     const nodeKey = zone.dataset.retryDrop;
-    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
-    zone.addEventListener("dragleave", (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("dragover"); });
-    zone.addEventListener("drop", (e) => {
+    zone.ondragover = (e) => { e.preventDefault(); zone.classList.add("dragover"); };
+    zone.ondragleave = (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("dragover"); };
+    zone.ondrop = (e) => {
       e.preventDefault();
       zone.classList.remove("dragover");
       const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).filter((f) => (f.type || "").startsWith("image/"));
       if (files.length) addRetryImages(nodeKey, files);
-    });
+    };
   }
   for (const el of document.querySelectorAll("[data-retry-rm]")) {
     el.onclick = () => removeRetryImage(el.dataset.node, Number(el.dataset.idx));
