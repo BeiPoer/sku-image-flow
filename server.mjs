@@ -580,7 +580,16 @@ async function handleApi(req, res, url) {
   }
 
   if (req.method === "POST" && action === "generate") {
-    const body = await readJson(req);
+    const contentType = req.headers["content-type"] || "";
+    let body;
+    let retryFiles = [];
+    if (contentType.includes("multipart/form-data")) {
+      const { fields, files } = await parseMultipart(req, contentType);
+      body = { nodeKey: fields.nodeKey, count: fields.count, retryHint: fields.retryHint };
+      retryFiles = files.filter((file) => (file.contentType || "").startsWith("image/")).slice(0, 5);
+    } else {
+      body = await readJson(req);
+    }
     const node = getNode(body.nodeKey);
     const uploadedAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'upload' ORDER BY created_at ASC", skuId);
     if (!uploadedAssets.length) return sendJson(res, 400, { error: "请先上传产品图" });
@@ -589,6 +598,17 @@ async function handleApi(req, res, url) {
       if (!sku.selected_main_asset_id) return sendJson(res, 400, { error: "请先选择一张主图" });
       const selectedMain = row("SELECT * FROM asset WHERE id = ?", sku.selected_main_asset_id);
       if (selectedMain) referenceAssets.push(selectedMain);
+    }
+    // 本次重跑临时上传的修正参考图：与文字提示一起作为生成输入
+    if (retryFiles.length) {
+      const retryDir = path.join(uploadDir, skuId, "retry");
+      await mkdir(retryDir, { recursive: true });
+      for (const file of retryFiles) {
+        const ext = path.extname(file.filename) || extensionFromMime(file.contentType);
+        const filePath = path.join(retryDir, `${Date.now()}_retry_${safeFileName(path.basename(file.filename, ext))}${ext}`);
+        await writeFile(filePath, file.buffer);
+        referenceAssets.push(createAsset({ skuId, role: "retry", filePath, sourceType: "upload" }));
+      }
     }
     const prompt = buildImagePrompt({ node, sku, retryHint: body.retryHint || "" });
     const count = Math.max(1, Math.min(8, Number.parseInt(String(body.count || sku.candidate_count || config.defaultCandidates), 10)));
@@ -849,6 +869,7 @@ let state = {
   aspectOpen: "",
   preview: null,
   retryHints: {},
+  retryImages: {},
   activeNode: "assets",
   toasts: [],
   pending: { source: [], reference: [] },
@@ -1164,6 +1185,16 @@ function renderAssets(data, sourceAssets, refAssets) {
     </section>\`;
 }
 
+function retryImagesStrip(nodeKey) {
+  const imgs = state.retryImages[nodeKey] || [];
+  if (!imgs.length) return "";
+  return '<div class="retry-imgs">' + imgs.map((item, index) =>
+    '<div class="retry-thumb"><img src="' + esc(item.url) + '" alt="' + esc(item.name) + '" />' +
+      '<button type="button" class="retry-thumb-x" data-retry-rm data-node="' + esc(nodeKey) + '" data-idx="' + index + '" title="移除">' + icon("close", 12) + '</button>' +
+    '</div>'
+  ).join("") + '</div>';
+}
+
 function renderNode(data, node, list, sourceCount, selectedMain) {
   const blocked = node.usesSelectedMain && !selectedMain;
   const selected = list.find((candidate) => candidate.selected);
@@ -1203,9 +1234,10 @@ function renderNode(data, node, list, sourceCount, selectedMain) {
     <section class="panel">
       \${blocked ? \`<div class="locked-banner">\${iconLock(20)}<div class="lb-text"><strong>需先选择主图</strong><span>详情类节点依赖选定的主图作为参考，请先完成「01 主图」。</span></div><button class="ghost" data-nav="main">去选择主图</button></div>\` : ''}
       <div class="node-toolbar">
-        <div class="retry-row">
-          <label for="retry-\${esc(node.key)}">重跑修正重点（可留空）</label>
-          <textarea id="retry-\${esc(node.key)}" data-retry data-node="\${esc(node.key)}" placeholder="例如：主体更大、减少文字、背景更干净">\${esc(state.retryHints[node.key] || "")}</textarea>
+        <div class="retry-row" data-retry-drop="\${esc(node.key)}">
+          <label for="retry-\${esc(node.key)}">重跑修正重点（可留空，可在下方粘贴或拖拽图片，最多 5 张）</label>
+          <textarea id="retry-\${esc(node.key)}" data-retry data-node="\${esc(node.key)}" placeholder="例如：主体更大、减少文字、背景更干净；可直接粘贴(Ctrl+V)或拖拽图片到此处">\${esc(state.retryHints[node.key] || "")}</textarea>
+          \${retryImagesStrip(node.key)}
         </div>
         \${body}
       </div>
@@ -1289,6 +1321,31 @@ function bindContent(data, sourceAssets) {
   }
   for (const el of document.querySelectorAll("[data-retry]")) {
     el.oninput = (e) => { state.retryHints[el.dataset.node] = e.target.value; };
+    el.onpaste = (e) => {
+      const items = (e.clipboardData && e.clipboardData.items) || [];
+      const files = [];
+      for (const item of items) {
+        if (item.kind === "file" && (item.type || "").startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+      if (files.length) { e.preventDefault(); addRetryImages(el.dataset.node, files); }
+    };
+  }
+  for (const zone of document.querySelectorAll("[data-retry-drop]")) {
+    const nodeKey = zone.dataset.retryDrop;
+    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("dragover"); });
+    zone.addEventListener("dragleave", (e) => { if (!zone.contains(e.relatedTarget)) zone.classList.remove("dragover"); });
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      zone.classList.remove("dragover");
+      const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).filter((f) => (f.type || "").startsWith("image/"));
+      if (files.length) addRetryImages(nodeKey, files);
+    });
+  }
+  for (const el of document.querySelectorAll("[data-retry-rm]")) {
+    el.onclick = () => removeRetryImage(el.dataset.node, Number(el.dataset.idx));
   }
   for (const el of document.querySelectorAll("[data-nav]")) {
     el.onclick = () => { state.activeNode = el.dataset.nav; state.promptOpen = ""; state.rejectOpen = ""; render(); };
@@ -1314,6 +1371,23 @@ function bindContent(data, sourceAssets) {
 
 function setPending(role, fileList) {
   state.pending[role] = Array.from(fileList || []);
+  render();
+}
+
+const MAX_RETRY_IMAGES = 5;
+function addRetryImages(nodeKey, files) {
+  const cur = state.retryImages[nodeKey] || (state.retryImages[nodeKey] = []);
+  const room = MAX_RETRY_IMAGES - cur.length;
+  if (room <= 0) { pushToast("info", "每次重跑最多上传 " + MAX_RETRY_IMAGES + " 张图片"); return; }
+  const accepted = Array.from(files).slice(0, room);
+  for (const file of accepted) cur.push({ file, url: URL.createObjectURL(file), name: file.name || "image" });
+  if (files.length > room) pushToast("info", "最多 " + MAX_RETRY_IMAGES + " 张，多余的已忽略");
+  render();
+}
+function removeRetryImage(nodeKey, index) {
+  const cur = state.retryImages[nodeKey] || [];
+  const [removed] = cur.splice(index, 1);
+  if (removed && removed.url) URL.revokeObjectURL(removed.url);
   render();
 }
 
@@ -1359,11 +1433,25 @@ async function uploadFiles(role) {
 }
 
 async function generateNode(nodeKey) {
-  await run("生成图片", nodeKey, () => api("/api/skus/" + SKU_ID + "/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nodeKey, count: skuCount(), retryHint: state.retryHints[nodeKey] || null })
-  }));
+  const images = state.retryImages[nodeKey] || [];
+  await run("生成图片", nodeKey, async () => {
+    if (images.length) {
+      const form = new FormData();
+      form.set("nodeKey", nodeKey);
+      form.set("count", String(skuCount()));
+      if (state.retryHints[nodeKey]) form.set("retryHint", state.retryHints[nodeKey]);
+      for (const item of images) form.append("retryImages", item.file, item.name);
+      await api("/api/skus/" + SKU_ID + "/generate", { method: "POST", body: form });
+    } else {
+      await api("/api/skus/" + SKU_ID + "/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodeKey, count: skuCount(), retryHint: state.retryHints[nodeKey] || null })
+      });
+    }
+    for (const item of images) { if (item.url) URL.revokeObjectURL(item.url); }
+    state.retryImages[nodeKey] = [];
+  });
 }
 
 async function runPool(items, limit, worker) {

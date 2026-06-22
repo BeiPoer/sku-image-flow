@@ -530,8 +530,20 @@ details.analysis pre { border-top: 1px solid var(--line); border-radius: 0; }
 
 /* ---------- 节点 / 候选 ---------- */
 .node-toolbar { display: flex; flex-direction: column; gap: 12px; }
-.retry-row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.retry-row { display: grid; grid-template-columns: 1fr; gap: 8px; border-radius: var(--r-md); transition: box-shadow var(--t), background var(--t); }
 .retry-row label { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); }
+.retry-row.dragover { box-shadow: 0 0 0 3px var(--primary-ring); background: var(--primary-soft); }
+.retry-imgs { display: flex; flex-wrap: wrap; gap: 8px; }
+.retry-thumb { position: relative; width: 64px; height: 64px; border-radius: var(--r-sm, 8px); overflow: hidden; border: 1px solid var(--border, #e2e5ea); background: #f4f5f7; }
+.retry-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.retry-thumb-x {
+  position: absolute; top: 2px; right: 2px;
+  width: 18px; height: 18px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6); color: #fff; cursor: pointer;
+}
+.retry-thumb-x:hover { background: rgba(0, 0, 0, 0.82); }
 
 .locked-banner {
   display: flex;
