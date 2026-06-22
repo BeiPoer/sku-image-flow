@@ -37,16 +37,16 @@ const ASPECT_SIZE = {
 };
 
 const nodes = [
-  ["main", 1, "主图", "干净真实的产品主视觉，与详情页素材分开管理。", false, "生成一张电商产品主图。画面干净、真实、高级，产品主体清晰，正视或轻微平角，突出产品材质、颜色和包装质感。不要改变产品结构、logo、表盘、刻度、指针、表带材质和颜色。暂不强制白底，但背景应简洁，不要生成多余文字、水印或错误标识。"],
-  ["hand_model", 2, "手模图", "产品佩戴或手持场景，突出真实使用感。", true, "生成一张手模佩戴或手持产品的电商图。手部自然、皮肤质感真实，产品占比清晰，突出佩戴效果和高级感。不要改变产品外观，不要添加错误文字。"],
-  ["waterproof", 3, "防水图", "突出防水能力的场景图。", true, "生成一张防水主题电商图。使用真实水花、水珠或浅水场景突出防水能力，画面有冲击力但产品主体必须清晰真实。不要改变产品外观，不要生成错误文字。"],
-  ["luminous", 4, "夜光图", "突出夜光和暗光质感。", true, "生成一张夜光主题电商图。暗光环境中突出产品夜光效果、表盘质感和高级科技感，光线真实。不要改变产品结构、logo、刻度和颜色，不要生成错误文字。"],
-  ["gift_box", 5, "礼盒图", "产品放入礼盒或包装盒的场景。", true, "生成一张礼盒包装场景图。产品放在精致礼盒或包装盒中，产品占比大、距离近，突出礼赠感、高级感和真实材质。不要改变产品主体，不要生成错误文字。"],
-  ["hero_poster", 6, "首屏海报", "详情页首屏用的强视觉海报。", true, "生成一张详情页首屏电商海报。画面美观大气，有设计感和视觉冲击力，排版大胆但不要杂乱，突出产品调性、材质和卖点。产品必须真实立体，保持主体一致。"],
-  ["detail", 7, "细节图", "侧面、正面、表带或局部细节展示。", true, "生成一张产品细节展示图，包含正面、侧面、表带或关键局部细节，突出材质、工艺和设计。可以使用分区构图，但产品结构必须与参考图一致，不要生成错误文字。"],
+  ["main", 1, "主图", "干净真实的产品主视觉，与详情页素材分开管理。", false, "生成一张电商产品主图，不要改变产品结构、logo、表盘、刻度、指针、表带材质和颜色。产品精修，产品置于纯净的纯白背景上。正视图,平角,3D渲染，精准还原产品颜色与包装材质(如玻璃+通道,塑料的哑光,金属的光泽)。清除所有指纹，灰尘与瑕疵，让产品看起来崭新，手表立体感强，提升整体感和高级感。标签/文字需清晰锐利。光线条和均匀，突出产品精致感，符合电商主图标准，表盘刻度和数字要清晰完整，不要模糊缺失，特别是logo的图案要正确无误，而且立体"],
+  ["hand_model", 2, "手模图", "产品佩戴或手持场景，突出真实使用感。", true, "根据这个产品的调性，特性，设计细节，生成一张手摸图，要美观大气，注意不要文字不要文字，有较强的视觉冲击力，整体画面要和谐，手表要真实，立体感"],
+  ["waterproof", 3, "防水图", "突出防水能力的场景图。", true, "根据这个产品的调性，特性，设计细节，生成一张防水电商海报，要美观大气，注意不要文字不要文字，有较强的视觉冲击力，大胆有冲击力，突破常规，整体画面要和谐，不要太简单了，要突出手表的力量感，手表要真实，立体感"],
+  ["luminous", 4, "夜光图", "突出夜光和暗光质感。", true, "根据这个产品的调性，特性，设计细节，生成一张夜光电商海报图，要美观大气，注意不要文字不要文字，有较强的视觉冲击力，大胆有冲击力，突破常规，整体画面要和谐，不要太简单了，要突出手表的力量感手表要真实，立体感"],
+  ["gift_box", 5, "礼盒图", "产品放入礼盒或包装盒的场景。", true, "根据这个产品的调性，特性，设计细节，生成一张手表放在礼盒里面的拍摄图，要美观大气，整体画面要和谐，主要突出手表，手表占比要大，距离近，手表要真实！立体感。如果是女士手表，要突出手表的柔美；如果是男士手表，要突出手表的力量感"],
+  ["hero_poster", 6, "首屏海报", "详情页首屏用的强视觉海报。", true, "根据这个产品的调性，特性，设计细节，生成一张电商海报，要美观大气，有设计感，有较强的视觉冲击力，排版要大胆有冲击力，突破常规，文案不要太简单，整体画面要和谐，不要太简单了，要突出手表的力量感，手表要真实，立体感"],
+  ["detail", 7, "细节图", "侧面、正面、表带或局部细节展示。", true, "根据这个产品的调性，特性，设计细节，生成一张三个方位细节的电商详情页，内容：侧面，正面，表带，要美观大气，有设计感，有较强的视觉冲击力，突破常规，整体画面要和谐，不要太简单了，要突出手表的力量感，手表要真实，立体感"],
   ["display_1", 8, "展示图1", "场景展示图第一张。", true, "生成一张产品展示图，使用简洁高级场景突出产品外观、质感和电商吸引力。产品主体清晰，构图稳定，保持产品一致。"],
-  ["display_2", 9, "展示图2", "场景展示图第二张。", true, "生成另一张产品展示图，风格与整套图片统一，但构图和背景与上一张有差异。突出产品高级感和真实感，保持产品一致。"],
-  ["display_3", 10, "展示图3", "场景展示图第三张。", true, "生成第三张产品展示图，延续统一视觉风格，使用不同角度或场景强化产品质感。不要改变产品结构、logo、颜色和比例。"],
+  ["display_2", 9, "展示图2", "场景展示图第二张。", true, "生成一张产品展示图，风格与整套图片统一，但构图和背景与上一张有差异。突出产品高级感和真实感，保持产品一致。"],
+  ["display_3", 10, "展示图3", "场景展示图第三张。", true, "生成一张产品展示图，延续统一视觉风格，使用不同角度或场景强化产品质感。不要改变产品结构、logo、颜色和比例。"],
   ["intro", 11, "简介图", "产品简介/卖点展示图。", true, "生成一张产品简介图，用电商视觉方式突出产品核心卖点、材质和高级感。可以有清晰排版感，但不要生成乱码或错误文字；如果不能保证文字准确，请保持无文字。"],
   ["lens_feature", 12, "镜片功能图", "镜片或核心功能展示图。", true, "生成一张镜片或核心功能展示图，突出镜面、表盘、材质、防刮或通透质感等功能特征。画面专业、清晰、高级，保持产品主体一致，不要生成错误文字。"]
 ].map(([key, order, label, description, usesSelectedMain, prompt]) => ({ key, order, label, description, usesSelectedMain, prompt, defaultAspect: key === "main" ? "1:1" : "9:16" }));
@@ -146,6 +146,10 @@ function initDb() {
       FOREIGN KEY (sku_id) REFERENCES sku(id) ON DELETE CASCADE,
       FOREIGN KEY (task_id) REFERENCES generation_task(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS app_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS idx_asset_sku ON asset(sku_id);
     CREATE INDEX IF NOT EXISTS idx_task_sku ON generation_task(sku_id);
     CREATE INDEX IF NOT EXISTS idx_candidate_sku_node ON candidate_image(sku_id, node_key);
@@ -182,6 +186,53 @@ function row(statement, ...args) {
 
 function rows(statement, ...args) {
   return db.prepare(statement).all(...args);
+}
+
+// ---- 全局配置（app_config 键值表）：只存被用户改过的项，未改回退到代码内置默认值 ----
+function getConfig(key) {
+  const r = row("SELECT value FROM app_config WHERE key = ?", key);
+  return r ? r.value : null;
+}
+
+function setConfig(key, value) {
+  db.prepare("INSERT INTO app_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .run(key, value);
+}
+
+function deleteConfig(key) {
+  db.prepare("DELETE FROM app_config WHERE key = ?").run(key);
+}
+
+// 某节点的有效生图提示词：用户覆盖优先，否则回退该节点内置默认 prompt
+function effectiveNodePrompt(nodeKey) {
+  const override = getConfig("node_prompt:" + nodeKey);
+  if (override != null && override.trim()) return override;
+  return getNode(nodeKey).prompt;
+}
+
+// 有效的通用一致性要求（按行存储），为空回退内置默认
+function effectiveConsistencyRules() {
+  const override = getConfig("consistency_rules");
+  if (override != null) {
+    const list = override.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (list.length) return list;
+  }
+  return consistencyRules;
+}
+
+// 设置页所需的完整配置：每个节点带默认值与有效值，便于前端显示占位与「恢复默认」
+function getConfigPayload() {
+  return {
+    nodes: nodes.map((n) => ({
+      key: n.key,
+      label: n.label,
+      order: n.order,
+      defaultPrompt: n.prompt,
+      prompt: effectiveNodePrompt(n.key)
+    })),
+    consistencyRules: effectiveConsistencyRules(),
+    defaultConsistencyRules: consistencyRules
+  };
 }
 
 function createSku({ name, notes }) {
@@ -280,25 +331,68 @@ function parseAspects(raw) {
   }
 }
 
-function buildImagePrompt({ node, sku, retryHint }) {
+// 生图提示词分块：单一数据源。预览展示用它，实际拼接也用它，保证两者完全一致。
+// 每块：kind 类型；label 显示名；hint 「如何修改」提示；editable 是否可由用户改；
+//       present 本次是否参与拼接；text 该块拼进最终提示词的完整文本。
+function buildImageSegments({ node, sku, retryHint = "" }) {
   const analysis = parseAnalysis(sku.analysis_json);
-  const parts = [
-    `任务：${node.prompt}`,
-    `SKU/产品名称：${sku.name}`,
-    sku.notes ? `补充信息：${sku.notes}` : "",
-    analysis?.category ? `产品品类：${analysis.category}` : "",
-    analysis?.style ? `产品风格：${analysis.style}` : "",
-    analysis?.material ? `材质信息：${analysis.material}` : "",
-    Array.isArray(analysis?.colors) && analysis.colors.length ? `主要颜色：${analysis.colors.join("、")}` : "",
-    Array.isArray(analysis?.sellingPoints) && analysis.sellingPoints.length ? `核心卖点：${analysis.sellingPoints.join("、")}` : "",
-    "一致性要求：",
-    ...consistencyRules.map((item) => `- ${item}`),
-    Array.isArray(analysis?.consistencyRules) && analysis.consistencyRules.length ? "补充一致性约束：" : "",
-    ...(Array.isArray(analysis?.consistencyRules) ? analysis.consistencyRules.map((item) => `- ${item}`) : []),
-    retryHint ? `本次重跑修正重点：${retryHint}` : "",
-    "输出要求：生成高质量电商图片，产品占比清晰，构图专业。"
-  ];
-  return parts.filter(Boolean).join("\n");
+  const segs = [];
+  segs.push({
+    kind: "task", label: "任务（节点提示词）", editable: true, present: true,
+    hint: "在「全局设置」页修改该节点的生图提示词",
+    text: `任务：${effectiveNodePrompt(node.key)}`
+  });
+  segs.push({
+    kind: "sku_name", label: "SKU / 产品名称", editable: false, present: true,
+    hint: "来自新建 SKU 时填写的名称",
+    text: `SKU/产品名称：${sku.name}`
+  });
+  segs.push({
+    kind: "notes", label: "补充信息（备注）", editable: false, present: Boolean(sku.notes),
+    hint: "来自新建 SKU 时填写的零散备注，留空则不参与拼接",
+    text: sku.notes ? `补充信息：${sku.notes}` : ""
+  });
+  const aLines = [];
+  if (analysis?.category) aLines.push(`产品品类：${analysis.category}`);
+  if (analysis?.style) aLines.push(`产品风格：${analysis.style}`);
+  if (analysis?.material) aLines.push(`材质信息：${analysis.material}`);
+  if (Array.isArray(analysis?.colors) && analysis.colors.length) aLines.push(`主要颜色：${analysis.colors.join("、")}`);
+  if (Array.isArray(analysis?.sellingPoints) && analysis.sellingPoints.length) aLines.push(`核心卖点：${analysis.sellingPoints.join("、")}`);
+  segs.push({
+    kind: "analysis", label: "产品分析信息", editable: false, present: aLines.length > 0,
+    hint: "由「分析产品」自动生成，重新分析可更新；为空时不参与拼接",
+    text: aLines.join("\n")
+  });
+  const rules = effectiveConsistencyRules();
+  segs.push({
+    kind: "consistency", label: "通用一致性要求", editable: true, present: true,
+    hint: "在「全局设置」页修改通用一致性要求",
+    text: ["一致性要求：", ...rules.map((item) => `- ${item}`)].join("\n")
+  });
+  const extra = Array.isArray(analysis?.consistencyRules) ? analysis.consistencyRules : [];
+  segs.push({
+    kind: "analysis_consistency", label: "补充一致性约束", editable: false, present: extra.length > 0,
+    hint: "由「分析产品」自动生成；为空时不参与拼接",
+    text: extra.length ? ["补充一致性约束：", ...extra.map((item) => `- ${item}`)].join("\n") : ""
+  });
+  segs.push({
+    kind: "retry", label: "本次重跑修正重点", editable: true, present: Boolean(retryHint),
+    hint: "重跑时在该节点上方输入框填写，仅本次生成生效",
+    text: retryHint ? `本次重跑修正重点：${retryHint}` : ""
+  });
+  segs.push({
+    kind: "output", label: "输出要求", editable: false, present: true,
+    hint: "固定内容，如需修改请改源码 buildImageSegments",
+    text: "输出要求：生成高质量电商图片，产品占比清晰，构图专业。"
+  });
+  return segs;
+}
+
+function buildImagePrompt(args) {
+  return buildImageSegments(args)
+    .filter((seg) => seg.present && seg.text)
+    .map((seg) => seg.text)
+    .join("\n");
 }
 
 function buildAnalysisPrompt(sku) {
@@ -502,6 +596,32 @@ async function saveGeneratedImage({ skuId, nodeKey, b64, mimeType, index }) {
 }
 
 async function handleApi(req, res, url) {
+  if (url.pathname === "/api/config") {
+    if (req.method === "GET") return sendJson(res, 200, getConfigPayload());
+    if (req.method === "POST") {
+      const body = await readJson(req);
+      if (body.nodes && typeof body.nodes === "object") {
+        for (const [key, value] of Object.entries(body.nodes)) {
+          const node = getNode(key); // 校验节点 key 合法
+          const text = typeof value === "string" ? value.trim() : "";
+          if (!text || text === node.prompt) deleteConfig("node_prompt:" + key);
+          else setConfig("node_prompt:" + key, text);
+        }
+      }
+      if (body.consistencyRules !== undefined) {
+        const list = (Array.isArray(body.consistencyRules)
+          ? body.consistencyRules
+          : String(body.consistencyRules).split(/\r?\n/)
+        ).map((line) => String(line).trim()).filter(Boolean);
+        const isDefault = list.length === consistencyRules.length && list.every((item, i) => item === consistencyRules[i]);
+        if (!list.length || isDefault) deleteConfig("consistency_rules");
+        else setConfig("consistency_rules", list.join("\n"));
+      }
+      return sendJson(res, 200, getConfigPayload());
+    }
+    return sendJson(res, 405, { error: "方法不被支持" });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/skus") {
     return sendJson(res, 200, { skus: rows("SELECT * FROM sku ORDER BY updated_at DESC") });
   }
@@ -533,7 +653,12 @@ async function handleApi(req, res, url) {
       url: `/api/file?path=${encodeURIComponent(candidate.file_path)}`
     }));
     const tasks = rows("SELECT * FROM generation_task WHERE sku_id = ? ORDER BY created_at DESC", skuId);
-    return sendJson(res, 200, { sku, assets, candidates, tasks, nodes, defaults: { candidateCount: config.defaultCandidates } });
+    // 每个节点附带提示词分块预览（不含重跑修正，那是临时输入）
+    const nodesWithPrompt = nodes.map((node) => ({
+      ...node,
+      promptSegments: buildImageSegments({ node, sku, retryHint: "" })
+    }));
+    return sendJson(res, 200, { sku, assets, candidates, tasks, nodes: nodesWithPrompt, defaults: { candidateCount: config.defaultCandidates } });
   }
 
   if (req.method === "POST" && action === "upload") {
@@ -753,7 +878,7 @@ async function createZip(files) {
   return Buffer.concat([...localParts, central, end]);
 }
 
-function renderShell({ skuId = "" } = {}) {
+function renderShell({ skuId = "", page = "" } = {}) {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -771,7 +896,7 @@ function renderShell({ skuId = "" } = {}) {
       <p>加载中…</p>
     </div>
   </main>
-  <script>window.__SKU_ID__ = ${JSON.stringify(skuId)};</script>
+  <script>window.__SKU_ID__ = ${JSON.stringify(skuId)};window.__PAGE__ = ${JSON.stringify(page)};</script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>`;
@@ -779,6 +904,7 @@ function renderShell({ skuId = "" } = {}) {
 
 const appJs = `
 const SKU_ID = window.__SKU_ID__;
+const PAGE = window.__PAGE__ || "";
 const app = document.getElementById("app");
 const rejectReasons = ["产品不像", "logo 错", "结构错", "文字错误", "主体太小", "背景不合适", "风格不够高级"];
 
@@ -840,7 +966,8 @@ const ICON = {
   folder: 'M3 7h6l2 2h10v10H3z',
   alert: 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h0',
   info: 'M12 16v-4M12 8h0M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
-  zap: 'M13 2 3 14h7l-1 8 10-12h-7l1-8z'
+  zap: 'M13 2 3 14h7l-1 8 10-12h-7l1-8z',
+  gear: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM19.4 13a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.1a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0-1.2-2.9H1a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.9l-.1-.1A2 2 0 1 1 5 2.6l.1.1a1.7 1.7 0 0 0 1.9.3H7a1.7 1.7 0 0 0 1-1.6V1a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V7a1.7 1.7 0 0 0 1.6 1H23a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z'
 };
 
 function svg(paths, size) {
@@ -910,7 +1037,10 @@ let state = {
   toasts: [],
   pending: { source: [], reference: [] },
   batch: null,
-  busyNodes: {}
+  busyNodes: {},
+  config: null,
+  settingsDraft: null,
+  promptPreviewOpen: {}
 };
 const AUTO_CONCURRENCY = 4; // 一键生成时详情节点的并行数（按代理承受能力调整）
 let toastSeq = 0;
@@ -941,7 +1071,8 @@ async function run(label, node, fn) {
   render();
   try {
     await fn();
-    if (SKU_ID) await loadSku();
+    if (PAGE === "settings") await loadConfig();
+    else if (SKU_ID) await loadSku();
     else await loadHome();
   } catch (error) {
     pushToast("error", error.message || String(error), "操作失败");
@@ -954,6 +1085,7 @@ async function run(label, node, fn) {
 
 async function loadHome() { state.data = await api("/api/skus"); render(); }
 async function loadSku() { state.data = await api("/api/skus/" + SKU_ID); render(); }
+async function loadConfig() { state.config = await api("/api/config"); render(); }
 
 async function deleteSku(id, name) {
   if (!id) return;
@@ -974,7 +1106,8 @@ async function deleteSku(id, name) {
 }
 
 function render() {
-  if (SKU_ID) renderSku();
+  if (PAGE === "settings") renderSettings();
+  else if (SKU_ID) renderSku();
   else renderHome();
 }
 
@@ -1005,6 +1138,8 @@ function brandBar() {
         <span class="brand-mark">\${icon("box", 20)}</span>
         <span class="brand-text"><h1>电商图片工作流</h1><p>SKU 主图与详情图生成台</p></span>
       </a>
+      <span class="spacer"></span>
+      <a class="button ghost" href="/settings">\${icon("gear", 18)} 全局设置</a>
     </header>\`;
 }
 
@@ -1062,6 +1197,81 @@ function renderHome() {
   document.getElementById("refresh").onclick = () => loadHome();
   for (const el of document.querySelectorAll("[data-delete-sku]")) {
     el.onclick = () => deleteSku(el.dataset.deleteSku, el.dataset.skuName || "");
+  }
+  bindCommon();
+}
+
+/* ---------------- 全局设置页 ---------------- */
+function renderSettings() {
+  const cfg = state.config;
+  if (!cfg) {
+    app.innerHTML = '<div class="empty" style="padding:96px 20px"><div class="spinner" style="color:#9aa1ac"></div><p>加载中…</p></div>';
+    return;
+  }
+  const rulesText = (cfg.consistencyRules || []).join("\\n");
+  const rulesDefault = (cfg.defaultConsistencyRules || []).join("\\n");
+  const rulesDirty = rulesText !== rulesDefault;
+
+  paint(\`
+    \${brandBar()}
+    <div class="home-hero">
+      <h2>全局提示词配置</h2>
+      <p>这里修改的是所有 SKU 共用的生图提示词，改动立即对后续所有生成生效。留空或点「恢复默认」即回退到内置默认值。</p>
+    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <h3>\${icon("box", 18)} 通用一致性要求 \${rulesDirty ? '<span class="badge indigo"><span class="dot"></span>已自定义</span>' : ''}</h3>
+        <button class="ghost" data-reset-rules \${rulesDirty ? '' : 'disabled'} title="恢复默认一致性要求">\${icon("refresh", 16)} 恢复默认</button>
+      </div>
+      <p class="settings-hint">每行一条，会拼进每个节点的生图提示词。</p>
+      <label class="field" style="font-weight:600">
+        <textarea id="cfg-rules" rows="6" placeholder="\${esc(rulesDefault)}">\${esc(rulesText)}</textarea>
+      </label>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><h3>\${icon("zap", 18)} 各节点生图提示词 <span class="count">\${cfg.nodes.length}</span></h3></div>
+      <div class="settings-nodes">
+        \${cfg.nodes.map((n) => {
+          const dirty = (n.prompt || "") !== (n.defaultPrompt || "");
+          return \`
+          <div class="settings-node">
+            <div class="sn-head">
+              <strong>\${String(n.order).padStart(2, "0")} · \${esc(n.label)}</strong>
+              \${dirty ? '<span class="badge indigo"><span class="dot"></span>已自定义</span>' : ''}
+              <span class="spacer"></span>
+              <button class="ghost tiny" data-reset-node="\${esc(n.key)}" \${dirty ? '' : 'disabled'} title="恢复默认提示词">\${icon("refresh", 14)} 恢复默认</button>
+            </div>
+            <textarea class="cfg-node" data-node="\${esc(n.key)}" rows="4" placeholder="\${esc(n.defaultPrompt)}">\${esc(n.prompt || "")}</textarea>
+          </div>\`;
+        }).join("")}
+      </div>
+    </section>
+    <div class="settings-actions">
+      <a class="button ghost" href="/">\${icon("back", 18)} 返回首页</a>
+      <button id="cfg-save" \${state.busy ? 'disabled' : ''}>\${icon("check", 18)} 保存全部</button>
+    </div>
+    \${toastsHtml()}\`);
+
+  const collect = () => {
+    const nodesPatch = {};
+    for (const el of document.querySelectorAll(".cfg-node")) nodesPatch[el.dataset.node] = el.value;
+    const rules = (document.getElementById("cfg-rules") || {}).value || "";
+    return { nodes: nodesPatch, consistencyRules: rules };
+  };
+  const saveBtn = document.getElementById("cfg-save");
+  if (saveBtn) saveBtn.onclick = () => run("保存配置", "", async () => {
+    await api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collect()) });
+    pushToast("success", "全局提示词已保存", "保存成功");
+  });
+  const resetRules = document.querySelector("[data-reset-rules]");
+  if (resetRules) resetRules.onclick = () => run("恢复默认", "", () =>
+    api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...collect(), consistencyRules: [] }) }));
+  for (const el of document.querySelectorAll("[data-reset-node]")) {
+    el.onclick = () => run("恢复默认", "", () => {
+      const patch = collect();
+      patch.nodes[el.dataset.resetNode] = ""; // 空串 → 后端回退默认
+      return api("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    });
   }
   bindCommon();
 }
@@ -1231,6 +1441,36 @@ function retryImagesStrip(nodeKey) {
   ).join("") + '</div>';
 }
 
+function renderPromptPreview(node) {
+  const segs = node.promptSegments || [];
+  const open = Boolean(state.promptPreviewOpen[node.key]);
+  const used = segs.filter((s) => s.present && s.text);
+  const head = \`<button class="pp-toggle \${open ? 'open' : ''}" data-pp-toggle data-node="\${esc(node.key)}">
+      \${icon("zap", 15)}<span>查看生图提示词（只读）</span>
+      <span class="pp-count">\${used.length} 处来源</span>
+      <span class="pp-chev">\${icon("chev", 15)}</span>
+    </button>\`;
+  if (!open) return \`<div class="prompt-preview">\${head}</div>\`;
+  // 把最终提示词当作一整篇文章：按真实拼接顺序用 \\n 连接，
+  // 每段来源用底色高亮区分，hover 显示「如何修改」。
+  const article = used.map((s) =>
+    '<span class="seg seg-' + s.kind + (s.editable ? ' seg-rw' : ' seg-ro') +
+      '" data-tip="' + esc((s.editable ? '可改 · ' : '只读 · ') + s.label + '：' + s.hint) + '" tabindex="0">' +
+      esc(s.text) +
+    '</span>'
+  ).join("\\n");
+  const absent = segs.filter((s) => !(s.present && s.text));
+  const absentNote = absent.length
+    ? '<p class="pp-absent-note">未参与本次拼接：' + absent.map((s) => esc(s.label)).join("、") + '</p>'
+    : '';
+  return \`<div class="prompt-preview open">
+      \${head}
+      <p class="pp-note">下面是该节点最终发给生图接口的完整提示词。不同颜色代表不同来源，鼠标悬停任意高亮段可看「如何修改」。内容在此只读。</p>
+      <div class="prompt-article">\${article}</div>
+      \${absentNote}
+    </div>\`;
+}
+
 function renderNode(data, node, list, sourceCount, selectedMain) {
   const blocked = node.usesSelectedMain && !selectedMain;
   const selected = list.find((candidate) => candidate.selected);
@@ -1277,6 +1517,7 @@ function renderNode(data, node, list, sourceCount, selectedMain) {
             <textarea id="retry-\${esc(node.key)}" data-retry data-node="\${esc(node.key)}" placeholder="例如：主体更大、减少文字、背景更干净；可直接粘贴(Ctrl+V)或拖拽图片到此处">\${esc(state.retryHints[node.key] || "")}</textarea>
           </div>
         </div>
+        \${renderPromptPreview(node)}
         \${body}
       </div>
     </section>\`;
@@ -1356,6 +1597,13 @@ function bindContent(data, sourceAssets) {
 
   for (const el of document.querySelectorAll("[data-generate]")) {
     el.onclick = () => generateNode(el.dataset.node);
+  }
+  for (const el of document.querySelectorAll("[data-pp-toggle]")) {
+    el.onclick = () => {
+      const key = el.dataset.node;
+      state.promptPreviewOpen[key] = !state.promptPreviewOpen[key];
+      render();
+    };
   }
   for (const el of document.querySelectorAll("[data-retry]")) {
     el.oninput = (e) => { state.retryHints[el.dataset.node] = e.target.value; };
@@ -1572,7 +1820,8 @@ async function autoGenerate() {
   }
 }
 
-if (SKU_ID) loadSku();
+if (PAGE === "settings") loadConfig();
+else if (SKU_ID) loadSku();
 else loadHome();
 
 window.addEventListener("keydown", (event) => {
@@ -1604,6 +1853,9 @@ const server = createServer(async (req, res) => {
       const handled = await handleApi(req, res, url);
       if (!handled) return sendJson(res, 404, { error: "接口不存在" });
       return;
+    }
+    if (url.pathname === "/settings") {
+      return sendHtml(res, renderShell({ page: "settings" }));
     }
     const skuPage = /^\/skus\/([^/]+)$/.exec(url.pathname);
     if (url.pathname === "/" || skuPage) {

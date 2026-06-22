@@ -263,6 +263,20 @@ textarea { min-height: 84px; resize: vertical; line-height: 1.55; }
 .home-hero h2 { margin: 0 0 6px; font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
 .home-hero p { margin: 0; color: var(--text-secondary); font-size: 15px; }
 
+/* 全局设置页 */
+.settings-hint { margin: 0 0 12px; color: var(--text-secondary); font-size: 13px; }
+.settings-nodes { display: grid; gap: 18px; }
+.settings-node { display: grid; gap: 8px; }
+.settings-node .sn-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.settings-node .sn-head .spacer { flex: 1; }
+.settings-node textarea { min-height: 96px; }
+.settings-actions {
+  display: flex; align-items: center; gap: 12px;
+  position: sticky; bottom: 0; padding: 16px 0;
+  background: linear-gradient(rgba(247, 248, 250, 0), rgba(247, 248, 250, 0.92) 30%);
+}
+.settings-actions .button.ghost { margin-right: auto; }
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -603,6 +617,95 @@ details.analysis pre { border-top: 1px solid var(--line); border-radius: 0; }
 .reject-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .reject-flag { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--warn); }
 .prompt-box { max-height: 220px; border-radius: var(--r-sm); }
+
+/* 生图提示词分块预览（只读） */
+.prompt-preview { margin: 4px 0 16px; }
+.pp-toggle {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  min-height: 40px; padding: 0 14px;
+  background: var(--panel); color: var(--text-secondary);
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  font-size: 13px; font-weight: 600;
+}
+.pp-toggle:hover { background: var(--bg-subtle); border-color: var(--line-strong); }
+.pp-toggle .pp-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.pp-toggle .pp-chev { display: inline-flex; transition: transform 0.18s ease; color: var(--text-muted); }
+.pp-toggle.open { border-color: var(--primary); color: var(--primary); background: var(--primary-soft); }
+.pp-toggle.open .pp-chev { transform: rotate(90deg); color: var(--primary); }
+.pp-note { margin: 12px 2px 12px; font-size: 12.5px; line-height: 1.6; color: var(--text-secondary); }
+
+/* 最终提示词整体呈现为一篇文章，内部不同来源的句段用底色高亮区分 */
+.prompt-article {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #0f1320;
+  border-radius: var(--r-md);
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.95;
+  color: #d7dbe6;
+}
+.prompt-article .seg {
+  position: relative;
+  border-radius: 4px;
+  padding: 1.5px 4px;
+  cursor: help;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  transition: filter 0.12s ease, outline-color 0.12s ease;
+  outline: 1px solid transparent;
+}
+.prompt-article .seg:hover,
+.prompt-article .seg:focus-visible {
+  filter: brightness(1.28);
+  outline-color: rgba(255, 255, 255, 0.5);
+}
+/* 按来源配色：可改=暖/主色系，只读来源=冷/中性色系 */
+.seg-task        { background: rgba(129, 120, 246, 0.30); }
+.seg-consistency { background: rgba(129, 120, 246, 0.22); }
+.seg-retry       { background: rgba(217, 119, 6, 0.32); }
+.seg-sku_name    { background: rgba(37, 99, 235, 0.30); }
+.seg-notes       { background: rgba(37, 99, 235, 0.22); }
+.seg-analysis    { background: rgba(22, 163, 74, 0.30); }
+.seg-analysis_consistency { background: rgba(22, 163, 74, 0.22); }
+.seg-output      { background: rgba(154, 161, 172, 0.24); }
+/* 可改的段加一条下划虚线作额外暗示 */
+.seg-rw { text-decoration: underline dotted rgba(255, 255, 255, 0.45); text-underline-offset: 3px; }
+
+/* hover 提示气泡：显示「可改/只读 · 来源：如何修改」 */
+.prompt-article .seg::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 7px);
+  z-index: 40;
+  width: max-content;
+  max-width: 300px;
+  white-space: normal;
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+  color: #fff;
+  background: #1f2433;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.prompt-article .seg:hover::after,
+.prompt-article .seg:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+.pp-absent-note { margin: 10px 2px 0; font-size: 12px; color: var(--text-muted); }
+
 
 /* ---------- 骨架屏 ---------- */
 .skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
