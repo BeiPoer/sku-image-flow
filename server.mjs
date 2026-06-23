@@ -1319,7 +1319,7 @@ function renderSku() {
       </div>
       \${state.batch
         ? \`<button disabled><span class="spinner"></span> 生成中 \${state.batch.done}/\${state.batch.total}</button>\`
-        : \`<button data-autogen \${state.busy ? 'disabled' : ''}>\${icon("zap", 18)} 一键生成</button>\`}
+        : \`<button data-autogen \${state.busy || Object.keys(state.busyNodes).length ? 'disabled' : ''}>\${icon("zap", 18)} 一键生成</button>\`}
       <a class="button \${selectedCount ? "" : "disabled"}" href="/api/skus/\${esc(data.sku.id)}/export">\${icon("download", 18)} 下载 zip</a>
     </header>
     <div class="workspace">
@@ -1504,7 +1504,7 @@ function renderNode(data, node, list, sourceCount, selectedMain) {
             '</button>' + menu +
           '</div>';
         })()}
-        <button data-generate data-node="\${esc(node.key)}" \${state.busy || blocked || !sourceCount ? 'disabled' : ''}>\${icon("refresh", 18)} \${list.length ? "重跑" : "生成"} \${skuCount()} 张</button>
+        <button data-generate data-node="\${esc(node.key)}" \${state.busy || isGenerating(node.key) || blocked || !sourceCount ? 'disabled' : ''}>\${icon("refresh", 18)} \${list.length ? "重跑" : "生成"} \${skuCount()} 张</button>
       </div>
     </div>
     <section class="panel">
@@ -1719,8 +1719,13 @@ async function uploadFiles(role) {
 }
 
 async function generateNode(nodeKey) {
+  // 仅在「该节点自身正在跑」或「有全局重操作（一键生成/分析等）」时阻止；
+  // 不同节点之间用 per-node 标记，互不阻塞，可并行重跑。
+  if (state.busy || isGenerating(nodeKey)) return;
   const images = state.retryImages[nodeKey] || [];
-  await run("生成图片", nodeKey, async () => {
+  state.busyNodes[nodeKey] = true;
+  render();
+  try {
     if (images.length) {
       const form = new FormData();
       form.set("nodeKey", nodeKey);
@@ -1737,7 +1742,13 @@ async function generateNode(nodeKey) {
     }
     for (const item of images) { if (item.url) URL.revokeObjectURL(item.url); }
     state.retryImages[nodeKey] = [];
-  });
+    delete state.busyNodes[nodeKey];
+    await loadSku();
+  } catch (error) {
+    delete state.busyNodes[nodeKey];
+    pushToast("error", error.message || String(error), "操作失败");
+    render();
+  }
 }
 
 async function runPool(items, limit, worker) {
@@ -1758,7 +1769,7 @@ async function runPool(items, limit, worker) {
 
 async function autoGenerate() {
   const data = state.data;
-  if (!data || state.busy || state.batch) return;
+  if (!data || state.busy || state.batch || Object.keys(state.busyNodes).length) return;
   const cand = byNode(data.candidates);
   const hasCand = (key) => (cand[key] || []).length > 0;
   const selectedMain = Boolean(data.sku.selected_main_asset_id);
