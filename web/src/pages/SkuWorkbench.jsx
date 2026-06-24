@@ -632,30 +632,30 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
                 onChange={(e) => setRetry({ hint: e.target.value })}
                 onPaste={onRetryPaste}
               />
-              {phrases && phrases.length > 0 && (
-                <div className="wb-phrases">
-                  {phrases.map((p, i) => (
-                    <button
-                      type="button"
-                      key={i}
-                      className="wb-phrase"
-                      title={p}
-                      onClick={() => {
-                        const cur = (retry.hint || "").trim();
-                        setRetry({ hint: cur ? cur + "，" + p : p });
-                      }}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div className="wb-retry-actions">
                 <Button icon={<IconRefresh />} size="small" theme="solid" type="primary" loading={busy} disabled={locked || busy} onClick={onGenerate}>
                   按修正重跑
                 </Button>
               </div>
             </div>
+            {phrases && phrases.length > 0 && (
+              <div className="wb-phrases">
+                {phrases.map((p, i) => (
+                  <button
+                    type="button"
+                    key={i}
+                    className="wb-phrase"
+                    title={p}
+                    onClick={() => {
+                      const cur = (retry.hint || "").trim();
+                      setRetry({ hint: cur ? cur + "，" + p : p });
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
           </Collapse.Panel>
         </Collapse>
       </div>
