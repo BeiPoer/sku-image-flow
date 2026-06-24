@@ -46,14 +46,14 @@ function blankNode() {
 
 function fromServer(n) {
   return {
-    _uid: n.node_key || "row_" + (tempSeq += 1),
-    node_key: n.node_key || "",
+    _uid: n.node_key || n.key || "row_" + (tempSeq += 1),
+    node_key: n.node_key || n.key || "",
     label: n.label || "",
     description: n.description || "",
     prompt: n.prompt || "",
-    isMain: Boolean(n.is_main),
-    usesSelectedMain: Boolean(n.uses_selected_main),
-    aspect: n.aspect || "9:16",
+    isMain: Boolean(n.is_main ?? n.isMain),
+    usesSelectedMain: Boolean(n.uses_selected_main ?? n.usesSelectedMain),
+    aspect: n.aspect || n.defaultAspect || "9:16",
   };
 }
 
