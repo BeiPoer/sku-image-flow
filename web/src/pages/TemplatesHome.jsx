@@ -16,6 +16,7 @@ import {
   IconRefresh,
   IconSetting,
   IconDelete,
+  IconCopy,
   IconChevronRight,
   IconLayers,
 } from "@douyinfe/semi-icons";
@@ -30,6 +31,7 @@ export default function TemplatesHome() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [copyingId, setCopyingId] = useState("");
   const formApi = useRef(null);
 
   async function load() {
@@ -49,10 +51,8 @@ export default function TemplatesHome() {
   }, []);
 
   async function handleCreate(values) {
-    const mode = values.mode || "watch";
+    // 固定空白创建（后端会预置一个主图首节点）
     const payload = { name: values.name, description: values.description };
-    if (mode === "watch") payload.preset = "watch";
-    else if (mode.startsWith("copy:")) payload.copyFrom = mode.slice(5);
     setSubmitting(true);
     try {
       const json = await api("/api/templates", {
@@ -60,11 +60,29 @@ export default function TemplatesHome() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      // 跳转到该模板下的 SKU 列表
-      navigate("/templates/" + json.template.id);
+      // 新建后进入节点设置页，先配置节点流程
+      navigate("/templates/" + json.template.id + "/settings");
     } catch (error) {
       Toast.error(error.message || "创建失败");
       setSubmitting(false);
+    }
+  }
+
+  async function handleCopy(tpl) {
+    setCopyingId(tpl.id);
+    try {
+      const json = await api("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: tpl.name + " 副本", description: tpl.description, copyFrom: tpl.id }),
+      });
+      Toast.success("已复制「" + tpl.name + "」");
+      await load();
+      navigate("/templates/" + json.template.id + "/settings");
+    } catch (error) {
+      Toast.error(error.message || "复制失败");
+    } finally {
+      setCopyingId("");
     }
   }
 
@@ -105,7 +123,6 @@ export default function TemplatesHome() {
         <Form
           getFormApi={(a) => (formApi.current = a)}
           onSubmit={handleCreate}
-          initValues={{ mode: "watch" }}
         >
           <Form.Input
             field="name"
@@ -118,12 +135,6 @@ export default function TemplatesHome() {
             label="模板说明"
             placeholder="这套模板适用的品类、风格，可留空"
             autosize={{ minRows: 2, maxRows: 4 }}
-          />
-          <Form.Select
-            field="mode"
-            label="起步方式"
-            optionList={modeOptions}
-            style={{ width: "100%" }}
           />
           <Button
             theme="solid"
@@ -184,6 +195,15 @@ export default function TemplatesHome() {
                     onClick={() => navigate("/templates/" + t.id + "/settings")}
                   >
                     节点设置
+                  </Button>
+                  <Button
+                    icon={<IconCopy />}
+                    theme="borderless"
+                    size="small"
+                    loading={copyingId === t.id}
+                    onClick={() => handleCopy(t)}
+                  >
+                    复制
                   </Button>
                   <Popconfirm
                     title="删除模板"

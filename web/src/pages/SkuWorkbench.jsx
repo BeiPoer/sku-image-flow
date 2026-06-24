@@ -5,10 +5,12 @@ import {
   Card,
   Collapse,
   Empty,
+  Input,
   InputNumber,
   Select,
   Spin,
   Tag,
+  TextArea,
   Toast,
   Tooltip,
   Typography,
@@ -38,6 +40,9 @@ export default function SkuWorkbench() {
   const [activeNode, setActiveNode] = useState("");
   const [busyNodes, setBusyNodes] = useState({}); // nodeKey -> true
   const [analyzing, setAnalyzing] = useState(false);
+  const [editingAnalysis, setEditingAnalysis] = useState(false);
+  const [analysisDraft, setAnalysisDraft] = useState(null);
+  const [savingAnalysis, setSavingAnalysis] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [retry, setRetry] = useState({}); // nodeKey -> { hint, files: File[] }
   const [count, setCount] = useState(4);
@@ -58,6 +63,31 @@ export default function SkuWorkbench() {
       .catch((e) => Toast.error(e.message || "加载失败"))
       .finally(() => setLoading(false));
   }, [load]);
+
+  // 后端正在生图的节点（status=running 且未超时）。刷新后据此恢复 loading。
+  // 超过 10 分钟的 running 视为僵尸任务（进程崩溃残留），不再算进行中。
+  const RUNNING_TTL = 10 * 60 * 1000;
+  const serverBusy = {};
+  if (data && Array.isArray(data.tasks)) {
+    const nowMs = Date.now();
+    for (const t of data.tasks) {
+      if (t.status === "running" && nowMs - new Date(t.created_at).getTime() < RUNNING_TTL) {
+        serverBusy[t.node_key] = true;
+      }
+    }
+  }
+  const hasRunning = Object.keys(serverBusy).length > 0;
+  // 节点是否在生图：本次点击发起的（本地） 或 后端 running（刷新恢复）
+  const isBusy = (key) => Boolean(busyNodes[key] || serverBusy[key]);
+
+  // 有进行中任务时自动轮询，后台跑完即自动拉到新候选图并解除 loading。
+  useEffect(() => {
+    if (!hasRunning) return undefined;
+    const timer = setInterval(() => {
+      load().catch(() => {});
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [hasRunning, load]);
 
   if (loading || !data) {
     return (
@@ -116,6 +146,52 @@ export default function SkuWorkbench() {
       Toast.error(e.message || "分析失败");
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  // 进入分析编辑态：把现有分析填进草稿（数组转成顿号分隔的字符串便于编辑）
+  function startEditAnalysis(a) {
+    setAnalysisDraft({
+      category: a?.category || "",
+      style: a?.style || "",
+      material: a?.material || "",
+      colors: Array.isArray(a?.colors) ? a.colors.join("、") : "",
+      sellingPoints: Array.isArray(a?.sellingPoints) ? a.sellingPoints.join("、") : "",
+    });
+    setEditingAnalysis(true);
+  }
+
+  function splitList(text) {
+    return String(text || "")
+      .split(/[、,，\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  async function saveAnalysis() {
+    const d = analysisDraft || {};
+    const payload = {
+      category: d.category.trim(),
+      style: d.style.trim(),
+      material: d.material.trim(),
+      colors: splitList(d.colors),
+      sellingPoints: splitList(d.sellingPoints),
+    };
+    setSavingAnalysis(true);
+    try {
+      await api("/api/skus/" + skuId + "/analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysis: payload }),
+      });
+      Toast.success("产品分析已保存");
+      setEditingAnalysis(false);
+      setAnalysisDraft(null);
+      await load();
+    } catch (e) {
+      Toast.error(e.message || "保存失败");
+    } finally {
+      setSavingAnalysis(false);
     }
   }
 
@@ -299,18 +375,45 @@ export default function SkuWorkbench() {
           <div className="wb-analysis">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
               <Text strong>产品分析</Text>
-              <Button
-                icon={<IconRefresh />}
-                size="small"
-                theme="light"
-                loading={analyzing}
-                disabled={!sourceAssets.length}
-                onClick={analyze}
-              >
-                {analysis ? "重新分析" : "分析产品"}
-              </Button>
+              {!editingAnalysis && (
+                <div style={{ display: "inline-flex", gap: 8 }}>
+                  {analysis && (
+                    <Button size="small" theme="borderless" onClick={() => startEditAnalysis(analysis)}>
+                      编辑
+                    </Button>
+                  )}
+                  <Button
+                    icon={<IconRefresh />}
+                    size="small"
+                    theme="light"
+                    loading={analyzing}
+                    disabled={!sourceAssets.length}
+                    onClick={analyze}
+                  >
+                    {analysis ? "重新分析" : "分析产品"}
+                  </Button>
+                </div>
+              )}
             </div>
-            {analysis ? (
+
+            {editingAnalysis ? (
+              <div className="wb-analysis-edit">
+                <label>品类</label>
+                <Input value={analysisDraft.category} onChange={(v) => setAnalysisDraft((s) => ({ ...s, category: v }))} placeholder="产品品类" />
+                <label>风格</label>
+                <Input value={analysisDraft.style} onChange={(v) => setAnalysisDraft((s) => ({ ...s, style: v }))} placeholder="产品风格" />
+                <label>材质</label>
+                <Input value={analysisDraft.material} onChange={(v) => setAnalysisDraft((s) => ({ ...s, material: v }))} placeholder="材质信息" />
+                <label>颜色（顿号 / 逗号 / 换行分隔多个）</label>
+                <TextArea value={analysisDraft.colors} onChange={(v) => setAnalysisDraft((s) => ({ ...s, colors: v }))} autosize={{ minRows: 1, maxRows: 3 }} placeholder="如：黑、银、玫瑰金" />
+                <label>核心卖点（顿号 / 逗号 / 换行分隔多个）</label>
+                <TextArea value={analysisDraft.sellingPoints} onChange={(v) => setAnalysisDraft((s) => ({ ...s, sellingPoints: v }))} autosize={{ minRows: 2, maxRows: 5 }} placeholder="如：防水、夜光、蓝宝石镜面" />
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <Button theme="solid" type="primary" size="small" loading={savingAnalysis} onClick={saveAnalysis}>保存</Button>
+                  <Button theme="borderless" size="small" onClick={() => { setEditingAnalysis(false); setAnalysisDraft(null); }}>取消</Button>
+                </div>
+              </div>
+            ) : analysis ? (
               <div className="wb-analysis-body">
                 {analysis.category && <span><b>品类：</b>{analysis.category}</span>}
                 {analysis.style && <span><b>风格：</b>{analysis.style}</span>}
@@ -347,7 +450,7 @@ export default function SkuWorkbench() {
                   {n.label}
                 </span>
                 <span className="wb-nav-status">
-                  {busyNodes[n.key] ? <Spin size="small" /> : <NodeStatusIcon kind={st.kind} />}
+                  {isBusy(n.key) ? <Spin size="small" /> : <NodeStatusIcon kind={st.kind} />}
                 </span>
               </button>
             );
@@ -359,7 +462,7 @@ export default function SkuWorkbench() {
             <NodeStage
               key={node.key}
               node={node}
-              busy={Boolean(busyNodes[node.key])}
+              busy={isBusy(node.key)}
               state={nodeState(node)}
               candidates={candByNode[node.key] || []}
               count={count}
@@ -467,7 +570,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
             <Tooltip content="本次每个节点生成的候选张数（SKU 级）">
               <InputNumber min={1} max={8} value={count} onChange={onCountChange} style={{ width: 110 }} suffix="张" />
             </Tooltip>
-            <Button icon={<IconBolt />} theme="solid" type="primary" loading={busy} disabled={locked} onClick={onGenerate}>
+            <Button icon={<IconBolt />} theme="solid" type="primary" loading={busy} disabled={locked || busy} onClick={onGenerate}>
               生成候选
             </Button>
           </span>
@@ -491,30 +594,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
         </div>
       )}
 
-      {candidates.length > 0 ? (
-        <>
-          <Text type="tertiary" size="small" style={{ display: "block", marginBottom: 8 }}>
-            候选图（{candidates.length}）· 点图放大，点「选为最终图」定稿
-          </Text>
-          <div className="wb-candidates">
-            {candidates.map((c) => (
-              <div key={c.id} className={"wb-cand" + (c.selected ? " selected" : "")}>
-                <img src={c.url} className="wb-cand-img" alt="" onClick={() => onPreview(c.url)} />
-                <div className="wb-cand-bar">
-                  {c.selected ? (
-                    <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
-                  ) : (
-                    <Button size="small" theme="light" onClick={() => onSelect(c.id)}>选为最终图</Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : (
-        !locked && <Empty image={<IconImage size="extra-large" />} description="还没有候选图，点右上「生成候选」。" style={{ padding: "24px 0" }} />
-      )}
-
+      {/* 重跑与提示词放在候选图之前：候选图可能很多，避免每次往下滚 */}
       {/* 重跑：修正提示词 + 临时参考图（粘贴 / 拖拽） */}
       <div className="wb-retry">
         <Collapse keepDOM defaultActiveKey="retry">
@@ -544,7 +624,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
                 onPaste={onRetryPaste}
               />
               <div className="wb-retry-actions">
-                <Button icon={<IconRefresh />} size="small" theme="solid" type="primary" loading={busy} disabled={locked} onClick={onGenerate}>
+                <Button icon={<IconRefresh />} size="small" theme="solid" type="primary" loading={busy} disabled={locked || busy} onClick={onGenerate}>
                   按修正重跑
                 </Button>
               </div>
@@ -555,13 +635,37 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
 
       {/* 生图提示词预览：整篇文章，按来源用底色分块，hover 看「如何修改」 */}
       {Array.isArray(node.promptSegments) && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, marginBottom: 16 }}>
           <Collapse>
             <Collapse.Panel header={<Text type="tertiary" size="small">查看生图提示词（只读）</Text>} itemKey="prompt">
               <PromptArticle segments={node.promptSegments} />
             </Collapse.Panel>
           </Collapse>
         </div>
+      )}
+
+      {candidates.length > 0 ? (
+        <>
+          <Text type="tertiary" size="small" style={{ display: "block", marginBottom: 8 }}>
+            候选图（{candidates.length}）· 点图放大，点「选为最终图」定稿
+          </Text>
+          <div className="wb-candidates">
+            {candidates.map((c) => (
+              <div key={c.id} className={"wb-cand" + (c.selected ? " selected" : "")}>
+                <img src={c.url} className="wb-cand-img" alt="" onClick={() => onPreview(c.url)} />
+                <div className="wb-cand-bar">
+                  {c.selected ? (
+                    <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
+                  ) : (
+                    <Button size="small" theme="light" onClick={() => onSelect(c.id)}>选为最终图</Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        !locked && <Empty image={<IconImage size="extra-large" />} description="还没有候选图，点右上「生成候选」。" style={{ padding: "24px 0" }} />
       )}
     </Card>
   );

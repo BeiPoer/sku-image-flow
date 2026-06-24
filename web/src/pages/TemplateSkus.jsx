@@ -186,7 +186,10 @@ export default function TemplateSkus() {
                   )}
                 </a>
                 <div className="sku-body">
-                  <div className="tpl-name">
+                  <div
+                    className="tpl-name sku-name-link"
+                    onClick={() => navigate("/skus/" + s.id)}
+                  >
                     <span>{s.name}</span>
                     <IconChevronRight className="tpl-go" />
                   </div>

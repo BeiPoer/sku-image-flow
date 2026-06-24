@@ -848,10 +848,17 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { template });
     }
     if (sub === "skus" && req.method === "GET") {
-      return sendJson(res, 200, {
-        template,
-        skus: rows("SELECT * FROM sku WHERE template_id = ? ORDER BY updated_at DESC", templateId)
+      const list = rows("SELECT * FROM sku WHERE template_id = ? ORDER BY updated_at DESC", templateId).map((sku) => {
+        // 封面优先级：已选定的最终图（按节点序，主图通常在前）> 任意上传的产品图
+        const cover =
+          row("SELECT file_path FROM candidate_image WHERE sku_id = ? AND selected = 1 ORDER BY node_key ASC LIMIT 1", sku.id) ||
+          row("SELECT file_path FROM asset WHERE sku_id = ? AND source_type = 'upload' AND role != 'retry' ORDER BY created_at ASC LIMIT 1", sku.id);
+        return {
+          ...sku,
+          cover_url: cover ? `/api/file?path=${encodeURIComponent(cover.file_path)}` : null
+        };
       });
+      return sendJson(res, 200, { template, skus: list });
     }
     if (sub === "nodes" && req.method === "PUT") {
       const body = await readJson(req);
@@ -968,6 +975,17 @@ async function handleApi(req, res, url) {
     const analysis = parseJsonLoose(text);
     const updated = updateSku(skuId, { analysis_json: JSON.stringify(analysis, null, 2), status: "analyzed" });
     return sendJson(res, 200, { sku: updated, analysis });
+  }
+
+  // 保存人工编辑后的产品分析（生图时即用改后的内容）
+  if (req.method === "POST" && action === "analysis") {
+    const body = await readJson(req);
+    const incoming = body && typeof body.analysis === "object" && body.analysis ? body.analysis : {};
+    // 与既有分析合并，保留未在表单出现的字段（如 raw、consistencyRules）
+    const prev = parseAnalysis(sku.analysis_json) || {};
+    const merged = { ...prev, ...incoming };
+    const updated = updateSku(skuId, { analysis_json: JSON.stringify(merged, null, 2), status: "analyzed" });
+    return sendJson(res, 200, { sku: updated, analysis: merged });
   }
 
   if (req.method === "POST" && action === "settings") {

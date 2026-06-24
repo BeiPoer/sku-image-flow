@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "npm --prefix web run build",
     "start": "node --experimental-sqlite server.mjs",
     "dev": "node --experimental-sqlite server.mjs",
     "web:install": "npm --prefix web install",
