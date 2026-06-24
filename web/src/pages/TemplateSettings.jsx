@@ -1,0 +1,300 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  Button,
+  Card,
+  Form,
+  Input,
+  Select,
+  Switch,
+  Spin,
+  Toast,
+  Typography,
+  Popconfirm,
+} from "@douyinfe/semi-ui";
+import {
+  IconPlus,
+  IconDelete,
+  IconArrowUp,
+  IconArrowDown,
+  IconSave,
+  IconStar,
+} from "@douyinfe/semi-icons";
+import { api } from "../api.js";
+import AppHeader from "../components/AppHeader.jsx";
+
+const { Title, Paragraph, Text } = Typography;
+
+const ASPECT_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"].map((v) => ({ value: v, label: v }));
+
+let tempSeq = 0;
+function blankNode() {
+  tempSeq += 1;
+  return {
+    _uid: "new_" + tempSeq,
+    node_key: "", // 空 = 新节点，由后端分配 key
+    label: "新节点",
+    description: "",
+    prompt: "",
+    isMain: false,
+    usesSelectedMain: true,
+    aspect: "9:16",
+  };
+}
+
+function fromServer(n) {
+  return {
+    _uid: n.node_key || "row_" + (tempSeq += 1),
+    node_key: n.node_key || "",
+    label: n.label || "",
+    description: n.description || "",
+    prompt: n.prompt || "",
+    isMain: Boolean(n.is_main),
+    usesSelectedMain: Boolean(n.uses_selected_main),
+    aspect: n.aspect || "9:16",
+  };
+}
+
+export default function TemplateSettings() {
+  const { templateId } = useParams();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [savingInfo, setSavingInfo] = useState(false);
+  const [savingNodes, setSavingNodes] = useState(false);
+  const [info, setInfo] = useState({ name: "", description: "", consistency_rules: "", default_candidate_count: "" });
+  const [nodes, setNodes] = useState([]);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const json = await api("/api/templates/" + encodeURIComponent(templateId));
+      const t = json.template;
+      setInfo({
+        name: t.name || "",
+        description: t.description || "",
+        consistency_rules: t.consistency_rules || "",
+        default_candidate_count: t.default_candidate_count ?? "",
+      });
+      setNodes((json.nodes || []).map(fromServer));
+    } catch (error) {
+      Toast.error(error.message || "加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId]);
+
+  async function saveInfo() {
+    setSavingInfo(true);
+    try {
+      const countRaw = String(info.default_candidate_count).trim();
+      await api("/api/templates/" + encodeURIComponent(templateId), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: info.name,
+          description: info.description,
+          consistency_rules: info.consistency_rules,
+          default_candidate_count: countRaw === "" ? null : Number(countRaw),
+        }),
+      });
+      Toast.success("模板信息已保存");
+    } catch (error) {
+      Toast.error(error.message || "保存失败");
+    } finally {
+      setSavingInfo(false);
+    }
+  }
+
+  function patchNode(uid, patch) {
+    setNodes((prev) => prev.map((n) => (n._uid === uid ? { ...n, ...patch } : n)));
+  }
+
+  // 主图为单选：设某节点为主图时，其余取消；主图节点不"依赖已选主图"
+  function setMain(uid, value) {
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (n._uid === uid) return { ...n, isMain: value, usesSelectedMain: value ? false : n.usesSelectedMain };
+        return value ? { ...n, isMain: false } : n;
+      })
+    );
+  }
+
+  function move(index, dir) {
+    setNodes((prev) => {
+      const next = [...prev];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  function removeNode(uid) {
+    setNodes((prev) => prev.filter((n) => n._uid !== uid));
+  }
+
+  async function saveNodes() {
+    if (!nodes.length) {
+      Toast.warning("至少保留一个节点");
+      return;
+    }
+    setSavingNodes(true);
+    try {
+      const payload = nodes.map((n) => ({
+        node_key: n.node_key || undefined,
+        label: n.label,
+        description: n.description,
+        prompt: n.prompt,
+        isMain: n.isMain,
+        usesSelectedMain: n.usesSelectedMain,
+        aspect: n.aspect,
+      }));
+      const json = await api("/api/templates/" + encodeURIComponent(templateId) + "/nodes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodes: payload }),
+      });
+      setNodes((json.nodes || []).map(fromServer));
+      Toast.success("节点已保存（对该模板下所有 SKU 实时生效）");
+    } catch (error) {
+      Toast.error(error.message || "保存失败");
+    } finally {
+      setSavingNodes(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="page">
+        <AppHeader title="节点设置" backTo={"/templates/" + templateId} />
+        <div className="center-box"><Spin size="large" /></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="page">
+      <AppHeader
+        title={info.name || "节点设置"}
+        subtitle="模板信息与详情图节点流程"
+        backTo={"/templates/" + templateId}
+      />
+
+      <Card className="panel" title={<span className="panel-title">模板信息</span>}>
+        <Form labelPosition="top">
+          <Form.Slot label="模板名称">
+            <Input value={info.name} onChange={(v) => setInfo((s) => ({ ...s, name: v }))} placeholder="模板名称" />
+          </Form.Slot>
+          <Form.Slot label="模板说明">
+            <Input.TextArea
+              value={info.description}
+              onChange={(v) => setInfo((s) => ({ ...s, description: v }))}
+              autosize={{ minRows: 2, maxRows: 4 }}
+              placeholder="适用品类、风格，可留空"
+            />
+          </Form.Slot>
+          <Form.Slot label="通用一致性要求（每行一条，参与所有节点的生图提示词）">
+            <Input.TextArea
+              value={info.consistency_rules}
+              onChange={(v) => setInfo((s) => ({ ...s, consistency_rules: v }))}
+              autosize={{ minRows: 3, maxRows: 8 }}
+              placeholder="例如：保持产品 logo、表盘刻度、配色一致"
+            />
+          </Form.Slot>
+          <Form.Slot label="默认候选张数（每个节点每次生成的候选图数量，留空用全局默认）">
+            <Input
+              type="number"
+              value={info.default_candidate_count}
+              onChange={(v) => setInfo((s) => ({ ...s, default_candidate_count: v }))}
+              placeholder="1 ~ 8"
+              style={{ maxWidth: 160 }}
+            />
+          </Form.Slot>
+          <Button theme="solid" type="primary" icon={<IconSave />} loading={savingInfo} onClick={saveInfo}>
+            保存模板信息
+          </Button>
+        </Form>
+      </Card>
+
+      <Card
+        className="panel"
+        title={<span className="panel-title">节点流程（{nodes.length}）</span>}
+        headerExtraContent={
+          <Button icon={<IconPlus />} theme="light" onClick={() => setNodes((p) => [...p, blankNode()])}>
+            添加节点
+          </Button>
+        }
+      >
+        <Paragraph type="tertiary" style={{ marginBottom: 16 }}>
+          顺序即生成与导出顺序。标记「主图」的节点产出主图（只能有一个）；标记「依赖已选主图」的节点，需先在主图节点选定一张图后才能生成。
+        </Paragraph>
+
+        <div className="node-list">
+          {nodes.map((n, i) => (
+            <div className="node-row" key={n._uid}>
+              <div className="node-row-head">
+                <div className="node-order">{i + 1}</div>
+                <Input
+                  value={n.label}
+                  onChange={(v) => patchNode(n._uid, { label: v })}
+                  placeholder="节点名称"
+                  prefix={n.isMain ? <IconStar style={{ color: "var(--semi-color-warning)" }} /> : undefined}
+                  style={{ flex: 1 }}
+                />
+                <Select
+                  value={n.aspect}
+                  onChange={(v) => patchNode(n._uid, { aspect: v })}
+                  optionList={ASPECT_OPTIONS}
+                  style={{ width: 96 }}
+                />
+                <Button icon={<IconArrowUp />} theme="borderless" size="small" disabled={i === 0} onClick={() => move(i, -1)} aria-label="上移" />
+                <Button icon={<IconArrowDown />} theme="borderless" size="small" disabled={i === nodes.length - 1} onClick={() => move(i, 1)} aria-label="下移" />
+                <Popconfirm title="删除节点" content="保存后该节点将被软删除，历史图片仍保留。" okType="danger" okText="删除" cancelText="取消" onConfirm={() => removeNode(n._uid)}>
+                  <Button icon={<IconDelete />} theme="borderless" type="danger" size="small" aria-label="删除" />
+                </Popconfirm>
+              </div>
+
+              <div className="node-row-toggles">
+                <span className="node-toggle">
+                  <Switch checked={n.isMain} onChange={(v) => setMain(n._uid, v)} size="small" />
+                  <Text size="small">设为主图节点</Text>
+                </span>
+                <span className="node-toggle">
+                  <Switch
+                    checked={n.usesSelectedMain}
+                    onChange={(v) => patchNode(n._uid, { usesSelectedMain: v })}
+                    size="small"
+                    disabled={n.isMain}
+                  />
+                  <Text size="small" type={n.isMain ? "quaternary" : undefined}>依赖已选主图</Text>
+                </span>
+                {n.node_key ? <Text type="quaternary" size="small">key: {n.node_key}</Text> : <Text type="tertiary" size="small">（新节点，保存后分配 key）</Text>}
+              </div>
+
+              <Input.TextArea
+                value={n.prompt}
+                onChange={(v) => patchNode(n._uid, { prompt: v })}
+                autosize={{ minRows: 2, maxRows: 6 }}
+                placeholder="该节点的生图提示词"
+              />
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          <Button theme="solid" type="primary" icon={<IconSave />} loading={savingNodes} onClick={saveNodes}>
+            保存节点
+          </Button>
+          <Button theme="borderless" onClick={() => navigate("/templates/" + templateId)}>
+            返回 SKU 列表
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}

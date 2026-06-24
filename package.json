@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "start": "node --experimental-sqlite server.mjs",
-    "dev": "node --experimental-sqlite server.mjs"
+    "dev": "node --experimental-sqlite server.mjs",
+    "web:install": "npm --prefix web install",
+    "web:dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build",
+    "setup": "npm --prefix web install && npm --prefix web run build"
   }
 }
