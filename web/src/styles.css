@@ -209,10 +209,15 @@ body {
   align-content: flex-start;
 }
 .wb-thumb {
+  width: 92px;
+  height: 92px;
   border-radius: var(--semi-border-radius-medium);
   object-fit: cover;
   border: 1px solid var(--semi-color-border);
+  cursor: zoom-in;
+  transition: opacity 0.15s ease;
 }
+.wb-thumb:hover { opacity: 0.85; }
 .wb-upload-trigger {
   width: 92px;
   height: 92px;
@@ -298,7 +303,13 @@ body {
   border-radius: var(--semi-border-radius-medium);
   padding: 12px;
 }
-.wb-selected-img { border-radius: var(--semi-border-radius-medium); }
+.wb-selected-img {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  border-radius: var(--semi-border-radius-medium);
+  cursor: zoom-in;
+}
 
 .wb-candidates {
   display: grid;
@@ -312,7 +323,15 @@ body {
   background: var(--semi-color-fill-0);
 }
 .wb-cand.selected { border-color: var(--semi-color-success); }
-.wb-cand-img { display: block; object-fit: cover; }
+.wb-cand-img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  cursor: zoom-in;
+  transition: opacity 0.15s ease;
+}
+.wb-cand-img:hover { opacity: 0.88; }
 .wb-cand-bar {
   display: flex;
   align-items: center;
@@ -386,3 +405,39 @@ body {
   .wb-main { grid-template-columns: 1fr; }
   .wb-nav { position: static; flex-direction: row; flex-wrap: wrap; max-height: none; }
 }
+
+/* ===== 放大预览 Lightbox ===== */
+.wb-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+}
+.wb-lightbox img {
+  max-width: 92vw;
+  max-height: 92vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  cursor: default;
+}
+.wb-lightbox-close {
+  position: fixed;
+  top: 20px;
+  right: 28px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wb-lightbox-close:hover { background: rgba(255, 255, 255, 0.3); }

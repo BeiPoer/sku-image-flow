@@ -5,7 +5,6 @@ import {
   Card,
   Collapse,
   Empty,
-  Image,
   InputNumber,
   Select,
   Spin,
@@ -42,6 +41,7 @@ export default function SkuWorkbench() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [retry, setRetry] = useState({}); // nodeKey -> { hint, files: File[] }
   const [count, setCount] = useState(4);
+  const [preview, setPreview] = useState(""); // 放大预览的图片 src，空串=关闭
   const sourceInputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -280,7 +280,7 @@ export default function SkuWorkbench() {
         <div className="wb-product">
           <div className="wb-thumbs">
             {sourceAssets.map((a) => (
-              <Image key={a.id} src={a.url} width={92} height={92} className="wb-thumb" />
+              <img key={a.id} src={a.url} className="wb-thumb" alt="" onClick={() => setPreview(a.url)} />
             ))}
             <button className="wb-upload-trigger" onClick={() => sourceInputRef.current?.click()}>
               <IconUpload />
@@ -367,6 +367,7 @@ export default function SkuWorkbench() {
               onAspect={(a) => setAspect(node, a)}
               onGenerate={() => generate(node)}
               onSelect={(cid) => selectCandidate(node, cid)}
+              onPreview={setPreview}
               retry={retry[node.key] || { hint: "", files: [] }}
               setRetry={(patch) => setRetry((s) => ({ ...s, [node.key]: { ...(s[node.key] || { hint: "", files: [] }), ...patch } }))}
             />
@@ -375,6 +376,28 @@ export default function SkuWorkbench() {
           )}
         </div>
       </div>
+
+      {preview ? <Lightbox src={preview} onClose={() => setPreview("")} /> : null}
+    </div>
+  );
+}
+
+// 自建放大预览层：全屏遮罩 + 居中大图，点遮罩或按 Esc 关闭。
+// 不用 Semi 的 Image 预览，避免 group/isInGroup 等隐藏逻辑导致点击不弹。
+function Lightbox({ src, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+  return (
+    <div className="wb-lightbox" onClick={onClose}>
+      <img src={src} alt="" onClick={(e) => e.stopPropagation()} />
+      <button className="wb-lightbox-close" onClick={onClose} aria-label="关闭">×</button>
     </div>
   );
 }
@@ -386,7 +409,7 @@ function NodeStatusIcon({ kind }) {
   return <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1px dashed var(--semi-color-border)" }} />;
 }
 
-function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, retry, setRetry }) {
+function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onPreview, retry, setRetry }) {
   const [dragOver, setDragOver] = useState(false);
   const selected = candidates.find((c) => c.selected);
   const locked = state.kind === "locked";
@@ -464,7 +487,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
           <Text strong style={{ display: "block", marginBottom: 8 }}>
             <IconTick style={{ color: "var(--semi-color-success)" }} /> 已选定最终图
           </Text>
-          <Image src={selected.url} width={220} className="wb-selected-img" />
+          <img src={selected.url} className="wb-selected-img" alt="" onClick={() => onPreview(selected.url)} />
         </div>
       )}
 
@@ -476,7 +499,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
           <div className="wb-candidates">
             {candidates.map((c) => (
               <div key={c.id} className={"wb-cand" + (c.selected ? " selected" : "")}>
-                <Image src={c.url} width="100%" height={180} className="wb-cand-img" />
+                <img src={c.url} className="wb-cand-img" alt="" onClick={() => onPreview(c.url)} />
                 <div className="wb-cand-bar">
                   {c.selected ? (
                     <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
