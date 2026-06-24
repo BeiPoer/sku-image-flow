@@ -703,6 +703,14 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
 function PromptArticle({ segments }) {
   const used = (segments || []).filter((s) => s.present && s.text);
   const absent = (segments || []).filter((s) => !(s.present && s.text));
+  const popupRoot = typeof document !== "undefined" ? document.body : undefined;
+
+  function segmentTip(s) {
+    const prefix = s.editable ? "可改" : "只读";
+    const hint = (s.hint || "").trim();
+    return hint ? `${prefix} · ${s.label}：${hint}` : `${prefix} · ${s.label}`;
+  }
+
   return (
     <div className="pp">
       <p className="pp-note">
@@ -711,13 +719,21 @@ function PromptArticle({ segments }) {
       <div className="pp-article">
         {used.map((s, i) => (
           <span key={i}>
-            <span
-              className={"pp-seg pp-seg-" + s.kind + (s.editable ? " pp-rw" : " pp-ro")}
-              data-tip={(s.editable ? "可改 · " : "只读 · ") + s.label + "：" + (s.hint || "")}
-              tabIndex={0}
+            <Tooltip
+              content={segmentTip(s)}
+              trigger="hover"
+              position="bottomLeft"
+              autoAdjustOverflow
+              zIndex={3000}
+              getPopupContainer={() => popupRoot || document.body}
             >
-              {s.text}
-            </span>
+              <span
+                className={"pp-seg pp-seg-" + s.kind + (s.editable ? " pp-rw" : " pp-ro")}
+                tabIndex={0}
+              >
+                {s.text}
+              </span>
+            </Tooltip>
             {i < used.length - 1 ? "\n" : null}
           </span>
         ))}

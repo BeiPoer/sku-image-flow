@@ -433,35 +433,6 @@ body {
 .pp-seg-output { background: var(--semi-color-fill-1); color: var(--semi-color-text-2); }
 /* 可改的段加一条下划虚线作额外暗示 */
 .pp-rw { text-decoration: underline dotted currentColor; text-underline-offset: 3px; }
-/* hover 提示气泡 */
-.pp-seg::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: 0;
-  bottom: calc(100% + 7px);
-  z-index: 40;
-  width: max-content;
-  max-width: 300px;
-  white-space: normal;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.5;
-  font-weight: 500;
-  color: var(--semi-color-bg-0);
-  background: var(--semi-color-tertiary);
-  border-radius: var(--semi-border-radius-small);
-  padding: 8px 10px;
-  box-shadow: var(--semi-shadow-elevated, 0 8px 24px rgba(0, 0, 0, 0.18));
-  opacity: 0;
-  transform: translateY(4px);
-  pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
-}
-.pp-seg:hover::after,
-.pp-seg:focus-visible::after {
-  opacity: 1;
-  transform: translateY(0);
-}
 .pp-absent {
   margin: 10px 2px 0;
   font-size: 12px;
