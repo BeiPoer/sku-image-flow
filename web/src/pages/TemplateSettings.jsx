@@ -9,6 +9,7 @@ import {
   Select,
   Switch,
   Spin,
+  Tag,
   Toast,
   Typography,
   Popconfirm,
@@ -56,6 +57,19 @@ function fromServer(n) {
   };
 }
 
+const MAX_PHRASES = 50;
+const MAX_PHRASE_LEN = 100;
+
+function parsePhrases(raw) {
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list.map((s) => String(s)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function TemplateSettings() {
   const { templateId } = useParams();
   const navigate = useNavigate();
@@ -63,6 +77,9 @@ export default function TemplateSettings() {
   const [savingInfo, setSavingInfo] = useState(false);
   const [savingNodes, setSavingNodes] = useState(false);
   const [info, setInfo] = useState({ name: "", description: "", consistency_rules: "", default_candidate_count: "" });
+  const [phrases, setPhrases] = useState([]);
+  const [newPhrase, setNewPhrase] = useState("");
+  const [savingPhrases, setSavingPhrases] = useState(false);
   const [nodes, setNodes] = useState([]);
 
   async function load() {
@@ -76,6 +93,7 @@ export default function TemplateSettings() {
         consistency_rules: t.consistency_rules || "",
         default_candidate_count: t.default_candidate_count ?? "",
       });
+      setPhrases(parsePhrases(t.phrases));
       setNodes((json.nodes || []).map(fromServer));
     } catch (error) {
       Toast.error(error.message || "加载失败");
@@ -109,6 +127,47 @@ export default function TemplateSettings() {
     } finally {
       setSavingInfo(false);
     }
+  }
+
+  // 保存短语（独立保存，立即对该模板下所有 SKU 的重跑快填生效）
+  async function persistPhrases(list) {
+    setSavingPhrases(true);
+    try {
+      await api("/api/templates/" + encodeURIComponent(templateId), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phrases: list }),
+      });
+      setPhrases(list);
+      Toast.success("短语已保存");
+    } catch (error) {
+      Toast.error(error.message || "保存失败");
+    } finally {
+      setSavingPhrases(false);
+    }
+  }
+
+  function addPhrase() {
+    const v = newPhrase.trim();
+    if (!v) return;
+    if (v.length > MAX_PHRASE_LEN) {
+      Toast.warning("单条短语不超过 " + MAX_PHRASE_LEN + " 字");
+      return;
+    }
+    if (phrases.length >= MAX_PHRASES) {
+      Toast.warning("最多 " + MAX_PHRASES + " 条短语");
+      return;
+    }
+    if (phrases.includes(v)) {
+      Toast.warning("该短语已存在");
+      return;
+    }
+    persistPhrases([...phrases, v]);
+    setNewPhrase("");
+  }
+
+  function removePhrase(idx) {
+    persistPhrases(phrases.filter((_, i) => i !== idx));
   }
 
   function patchNode(uid, patch) {
@@ -172,7 +231,7 @@ export default function TemplateSettings() {
   if (loading) {
     return (
       <div className="page">
-        <AppHeader title="节点设置" backTo={"/templates/" + templateId} />
+        <AppHeader title="模板设置" backTo={"/templates/" + templateId} />
         <div className="center-box"><Spin size="large" /></div>
       </div>
     );
@@ -181,8 +240,8 @@ export default function TemplateSettings() {
   return (
     <div className="page">
       <AppHeader
-        title={info.name || "节点设置"}
-        subtitle="模板信息与详情图节点流程"
+        title={info.name || "模板设置"}
+        subtitle="模板信息、短语与详情图节点流程"
         backTo={"/templates/" + templateId}
       />
 
@@ -220,6 +279,54 @@ export default function TemplateSettings() {
             保存模板信息
           </Button>
         </Form>
+      </Card>
+
+      <Card
+        className="panel"
+        title={<span className="panel-title">短语设置（{phrases.length}/{MAX_PHRASES}）</span>}
+      >
+        <Paragraph type="tertiary" style={{ marginBottom: 12 }}>
+          这些短语会显示在「重跑修正」输入框下方，点击即可快速填入。最多 {MAX_PHRASES} 条，每条 {MAX_PHRASE_LEN} 字内。对该模板下所有 SKU 生效。
+        </Paragraph>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <Input
+            value={newPhrase}
+            onChange={setNewPhrase}
+            onEnterPress={addPhrase}
+            maxLength={MAX_PHRASE_LEN}
+            showClear
+            placeholder="输入一条短语，回车或点「添加」"
+            disabled={phrases.length >= MAX_PHRASES}
+          />
+          <Button
+            icon={<IconPlus />}
+            theme="solid"
+            type="primary"
+            loading={savingPhrases}
+            disabled={!newPhrase.trim() || phrases.length >= MAX_PHRASES}
+            onClick={addPhrase}
+          >
+            添加
+          </Button>
+        </div>
+        {phrases.length === 0 ? (
+          <Text type="tertiary" size="small">还没有短语。</Text>
+        ) : (
+          <div className="phrase-list">
+            {phrases.map((p, i) => (
+              <Tag
+                key={i}
+                size="large"
+                color="blue"
+                closable
+                onClose={() => removePhrase(i)}
+                className="phrase-tag"
+              >
+                {p}
+              </Tag>
+            ))}
+          </div>
+        )}
       </Card>
 
       <Card

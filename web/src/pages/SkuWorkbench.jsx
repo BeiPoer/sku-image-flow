@@ -99,6 +99,14 @@ export default function SkuWorkbench() {
   }
 
   const { sku, template, assets, candidates, nodes } = data;
+  // 模板级短语（重跑快填用）
+  let phrases = [];
+  if (template && template.phrases) {
+    try {
+      const list = JSON.parse(template.phrases);
+      if (Array.isArray(list)) phrases = list.map((s) => String(s)).filter(Boolean);
+    } catch { /* 忽略损坏的 JSON */ }
+  }
   const sourceAssets = assets.filter((a) => a.role !== "retry" && a.source_type === "upload");
   const analysis = sku.analysis_json ? safeParse(sku.analysis_json) : null;
   const selectedCount = candidates.filter((c) => c.selected).length;
@@ -471,11 +479,12 @@ export default function SkuWorkbench() {
               onGenerate={() => generate(node)}
               onSelect={(cid) => selectCandidate(node, cid)}
               onPreview={setPreview}
+              phrases={phrases}
               retry={retry[node.key] || { hint: "", files: [] }}
               setRetry={(patch) => setRetry((s) => ({ ...s, [node.key]: { ...(s[node.key] || { hint: "", files: [] }), ...patch } }))}
             />
           ) : (
-            <Empty description="该模板还没有节点，去节点设置里添加。" />
+            <Empty description="该模板还没有节点，去模板设置里添加。" />
           )}
         </div>
       </div>
@@ -512,7 +521,7 @@ function NodeStatusIcon({ kind }) {
   return <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1px dashed var(--semi-color-border)" }} />;
 }
 
-function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onPreview, retry, setRetry }) {
+function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onPreview, phrases, retry, setRetry }) {
   const [dragOver, setDragOver] = useState(false);
   const selected = candidates.find((c) => c.selected);
   const locked = state.kind === "locked";
@@ -623,6 +632,24 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
                 onChange={(e) => setRetry({ hint: e.target.value })}
                 onPaste={onRetryPaste}
               />
+              {phrases && phrases.length > 0 && (
+                <div className="wb-phrases">
+                  {phrases.map((p, i) => (
+                    <button
+                      type="button"
+                      key={i}
+                      className="wb-phrase"
+                      title={p}
+                      onClick={() => {
+                        const cur = (retry.hint || "").trim();
+                        setRetry({ hint: cur ? cur + "，" + p : p });
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="wb-retry-actions">
                 <Button icon={<IconRefresh />} size="small" theme="solid" type="primary" loading={busy} disabled={locked || busy} onClick={onGenerate}>
                   按修正重跑

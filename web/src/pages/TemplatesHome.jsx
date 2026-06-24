@@ -60,7 +60,7 @@ export default function TemplatesHome() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      // 新建后进入节点设置页，先配置节点流程
+      // 新建后进入模板设置页，先配置节点流程
       navigate("/templates/" + json.template.id + "/settings");
     } catch (error) {
       Toast.error(error.message || "创建失败");
@@ -194,7 +194,7 @@ export default function TemplatesHome() {
                     size="small"
                     onClick={() => navigate("/templates/" + t.id + "/settings")}
                   >
-                    节点设置
+                    模板设置
                   </Button>
                   <Button
                     icon={<IconCopy />}

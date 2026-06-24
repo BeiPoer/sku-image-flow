@@ -202,6 +202,7 @@ function initDb() {
   ensureColumn(database, "sku", "candidate_count", "candidate_count INTEGER");
   ensureColumn(database, "sku", "node_aspects_json", "node_aspects_json TEXT");
   ensureColumn(database, "sku", "template_id", "template_id TEXT");
+  ensureColumn(database, "template", "phrases", "phrases TEXT");
   return database;
 }
 
@@ -819,26 +820,40 @@ async function handleApi(req, res, url) {
         nodes: templateNodes(templateId)
       });
     }
-    if (!sub && req.method === "PATCH") {
+    if (!sub && (req.method === "PATCH" || req.method === "PUT")) {
       const body = await readJson(req);
       const name = body.name === undefined ? template.name : (String(body.name).trim() || template.name);
       const description = body.description === undefined ? template.description : (String(body.description).trim() || null);
       let rulesJson = template.consistency_rules;
-      if (body.consistencyRules !== undefined) {
-        const list = (Array.isArray(body.consistencyRules)
-          ? body.consistencyRules
-          : String(body.consistencyRules).split(/\r?\n/)
+      // 兼容前端两种字段名：consistencyRules（驼峰）/ consistency_rules（下划线）
+      const rulesInput = body.consistencyRules !== undefined ? body.consistencyRules
+        : (body.consistency_rules !== undefined ? body.consistency_rules : undefined);
+      if (rulesInput !== undefined) {
+        const list = (Array.isArray(rulesInput)
+          ? rulesInput
+          : String(rulesInput).split(/\r?\n/)
         ).map((line) => String(line).trim()).filter(Boolean);
         const isDefault = list.length === consistencyRules.length && list.every((item, i) => item === consistencyRules[i]);
         rulesJson = (!list.length || isDefault) ? null : JSON.stringify(list);
       }
       let defCount = template.default_candidate_count;
-      if (body.defaultCandidateCount !== undefined) {
-        const raw = body.defaultCandidateCount;
-        defCount = (raw === null || raw === "") ? null : Math.max(1, Math.min(8, Number.parseInt(String(raw), 10) || config.defaultCandidates));
+      const countInput = body.defaultCandidateCount !== undefined ? body.defaultCandidateCount
+        : (body.default_candidate_count !== undefined ? body.default_candidate_count : undefined);
+      if (countInput !== undefined) {
+        defCount = (countInput === null || countInput === "") ? null : Math.max(1, Math.min(8, Number.parseInt(String(countInput), 10) || config.defaultCandidates));
       }
-      db.prepare("UPDATE template SET name = ?, description = ?, consistency_rules = ?, default_candidate_count = ?, updated_at = ? WHERE id = ?")
-        .run(name, description, rulesJson, defCount, now(), templateId);
+      // 短语：最多 50 条，每条 100 字内，去空
+      let phrasesJson = template.phrases;
+      if (body.phrases !== undefined) {
+        const list = (Array.isArray(body.phrases) ? body.phrases : [])
+          .map((p) => String(p == null ? "" : p).trim())
+          .filter(Boolean)
+          .map((p) => p.slice(0, 100))
+          .slice(0, 50);
+        phrasesJson = list.length ? JSON.stringify(list) : null;
+      }
+      db.prepare("UPDATE template SET name = ?, description = ?, consistency_rules = ?, default_candidate_count = ?, phrases = ?, updated_at = ? WHERE id = ?")
+        .run(name, description, rulesJson, defCount, phrasesJson, now(), templateId);
       return sendJson(res, 200, { template: getTemplate(templateId) });
     }
     if (!sub && req.method === "DELETE") {

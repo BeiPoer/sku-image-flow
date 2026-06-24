@@ -117,7 +117,7 @@ export default function TemplateSkus() {
             theme="borderless"
             onClick={() => navigate("/templates/" + templateId + "/settings")}
           >
-            节点设置
+            模板设置
           </Button>
         }
       />
