@@ -397,13 +397,13 @@ body {
 .pp-article {
   white-space: pre-wrap;
   word-break: break-word;
-  background: #0f1320;
+  background: var(--semi-color-fill-0);
+  border: 1px solid var(--semi-color-border);
   border-radius: var(--semi-border-radius-medium);
   padding: 16px;
-  font-family: var(--semi-font-family, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 2;
-  color: #d7dbe6;
+  color: var(--semi-color-text-0);
 }
 .pp-seg {
   position: relative;
@@ -417,20 +417,21 @@ body {
 }
 .pp-seg:hover,
 .pp-seg:focus-visible {
-  filter: brightness(1.28);
-  outline-color: rgba(255, 255, 255, 0.5);
+  filter: brightness(0.96);
+  outline-color: var(--semi-color-border);
 }
-/* 按来源配色：可改=暖/主色系，只读=冷/中性 */
-.pp-seg-task { background: rgba(129, 120, 246, 0.30); }
-.pp-seg-consistency { background: rgba(129, 120, 246, 0.22); }
-.pp-seg-retry { background: rgba(217, 119, 6, 0.32); }
-.pp-seg-sku_name { background: rgba(37, 99, 235, 0.30); }
-.pp-seg-notes { background: rgba(37, 99, 235, 0.22); }
-.pp-seg-analysis { background: rgba(22, 163, 74, 0.30); }
-.pp-seg-analysis_consistency { background: rgba(22, 163, 74, 0.22); }
-.pp-seg-output { background: rgba(154, 161, 172, 0.24); }
+/* 按来源配色，统一用 Semi 语义色（跟随主题）：
+   节点提示词/一致性=主色，产品标识=青，分析=绿，重跑=橙，输出=中性 */
+.pp-seg-task { background: var(--semi-color-primary-light-default); color: var(--semi-color-primary); }
+.pp-seg-consistency { background: var(--semi-color-primary-light-default); color: var(--semi-color-primary); }
+.pp-seg-sku_name { background: var(--semi-color-info-light-default); color: var(--semi-color-info); }
+.pp-seg-notes { background: var(--semi-color-info-light-default); color: var(--semi-color-info); }
+.pp-seg-analysis { background: var(--semi-color-success-light-default); color: var(--semi-color-success); }
+.pp-seg-analysis_consistency { background: var(--semi-color-success-light-default); color: var(--semi-color-success); }
+.pp-seg-retry { background: var(--semi-color-warning-light-default); color: var(--semi-color-warning); }
+.pp-seg-output { background: var(--semi-color-fill-1); color: var(--semi-color-text-2); }
 /* 可改的段加一条下划虚线作额外暗示 */
-.pp-rw { text-decoration: underline dotted rgba(255, 255, 255, 0.45); text-underline-offset: 3px; }
+.pp-rw { text-decoration: underline dotted currentColor; text-underline-offset: 3px; }
 /* hover 提示气泡 */
 .pp-seg::after {
   content: attr(data-tip);
@@ -445,12 +446,11 @@ body {
   font-size: 12px;
   line-height: 1.5;
   font-weight: 500;
-  color: #fff;
-  background: #1f2433;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--semi-color-bg-0);
+  background: var(--semi-color-tertiary);
   border-radius: var(--semi-border-radius-small);
   padding: 8px 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--semi-shadow-elevated, 0 8px 24px rgba(0, 0, 0, 0.18));
   opacity: 0;
   transform: translateY(4px);
   pointer-events: none;
