@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # 线上部署/重启脚本：拉代码 → 装 web 依赖（仅缺失时）→ 构建前端 → pm2 重启
-# 用法：bash restart.sh        （默认会 git pull）
-#       bash restart.sh --no-pull   （跳过 git pull，仅重新构建并重启）
-set -euo pipefail
+# 用法：sh restart.sh / bash restart.sh / ./restart.sh   （默认会 git pull）
+#       sh restart.sh --no-pull   （跳过 git pull，仅重新构建并重启）
+# 注：不用 `set -o pipefail`（dash/sh 不支持）；set -eu 足够，任一命令失败即退出。
+set -eu
 
 APP_NAME="sku-image-flow"
 # 切到脚本所在目录，保证在哪执行都对
