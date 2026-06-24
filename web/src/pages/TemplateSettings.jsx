@@ -5,6 +5,7 @@ import {
   Card,
   Form,
   Input,
+  TextArea,
   Select,
   Switch,
   Spin,
@@ -191,7 +192,7 @@ export default function TemplateSettings() {
             <Input value={info.name} onChange={(v) => setInfo((s) => ({ ...s, name: v }))} placeholder="模板名称" />
           </Form.Slot>
           <Form.Slot label="模板说明">
-            <Input.TextArea
+            <TextArea
               value={info.description}
               onChange={(v) => setInfo((s) => ({ ...s, description: v }))}
               autosize={{ minRows: 2, maxRows: 4 }}
@@ -199,7 +200,7 @@ export default function TemplateSettings() {
             />
           </Form.Slot>
           <Form.Slot label="通用一致性要求（每行一条，参与所有节点的生图提示词）">
-            <Input.TextArea
+            <TextArea
               value={info.consistency_rules}
               onChange={(v) => setInfo((s) => ({ ...s, consistency_rules: v }))}
               autosize={{ minRows: 3, maxRows: 8 }}
@@ -276,7 +277,7 @@ export default function TemplateSettings() {
                 {n.node_key ? <Text type="quaternary" size="small">key: {n.node_key}</Text> : <Text type="tertiary" size="small">（新节点，保存后分配 key）</Text>}
               </div>
 
-              <Input.TextArea
+              <TextArea
                 value={n.prompt}
                 onChange={(v) => patchNode(n._uid, { prompt: v })}
                 autosize={{ minRows: 2, maxRows: 6 }}
