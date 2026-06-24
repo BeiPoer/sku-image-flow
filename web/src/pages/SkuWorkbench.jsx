@@ -6,7 +6,6 @@ import {
   Collapse,
   Empty,
   Image,
-  ImagePreview,
   InputNumber,
   Select,
   Spin,
@@ -280,11 +279,9 @@ export default function SkuWorkbench() {
       <Card className="panel" title={<span className="panel-title"><IconImage /> 产品图与分析</span>}>
         <div className="wb-product">
           <div className="wb-thumbs">
-            <ImagePreview>
-              {sourceAssets.map((a) => (
-                <Image key={a.id} src={a.url} width={92} height={92} className="wb-thumb" />
-              ))}
-            </ImagePreview>
+            {sourceAssets.map((a) => (
+              <Image key={a.id} src={a.url} width={92} height={92} className="wb-thumb" />
+            ))}
             <button className="wb-upload-trigger" onClick={() => sourceInputRef.current?.click()}>
               <IconUpload />
               <Text size="small" type="tertiary">上传产品图</Text>
@@ -476,22 +473,20 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
           <Text type="tertiary" size="small" style={{ display: "block", marginBottom: 8 }}>
             候选图（{candidates.length}）· 点图放大，点「选为最终图」定稿
           </Text>
-          <ImagePreview>
-            <div className="wb-candidates">
-              {candidates.map((c) => (
-                <div key={c.id} className={"wb-cand" + (c.selected ? " selected" : "")}>
-                  <Image src={c.url} width="100%" height={180} className="wb-cand-img" />
-                  <div className="wb-cand-bar">
-                    {c.selected ? (
-                      <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
-                    ) : (
-                      <Button size="small" theme="light" onClick={() => onSelect(c.id)}>选为最终图</Button>
-                    )}
-                  </div>
+          <div className="wb-candidates">
+            {candidates.map((c) => (
+              <div key={c.id} className={"wb-cand" + (c.selected ? " selected" : "")}>
+                <Image src={c.url} width="100%" height={180} className="wb-cand-img" />
+                <div className="wb-cand-bar">
+                  {c.selected ? (
+                    <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
+                  ) : (
+                    <Button size="small" theme="light" onClick={() => onSelect(c.id)}>选为最终图</Button>
+                  )}
                 </div>
-              ))}
-            </div>
-          </ImagePreview>
+              </div>
+            ))}
+          </div>
         </>
       ) : (
         !locked && <Empty image={<IconImage size="extra-large" />} description="还没有候选图，点右上「生成候选」。" style={{ padding: "24px 0" }} />
