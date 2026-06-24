@@ -789,6 +789,12 @@ async function handleApi(req, res, url) {
         defCount = src.default_candidate_count;
       } else if (body.preset === "watch") {
         seedNodes = watchPresetNodes();
+      } else {
+        // 空白模板：预置一个主图首节点，后续节点默认依赖主图
+        seedNodes = [{
+          node_key: "main", ord: 1, label: "主图", description: "干净真实的产品主视觉。",
+          uses_selected_main: 0, is_main: 1, prompt: "", aspect: "1:1"
+        }];
       }
       const tpl = createTemplate({
         name, description: body.description?.trim() || null,
