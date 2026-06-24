@@ -882,7 +882,7 @@ async function handleApi(req, res, url) {
       });
       return sendJson(res, 200, { template, skus: list });
     }
-    if (sub === "nodes" && req.method === "PUT") {
+    if (sub === "nodes" && (req.method === "PUT" || req.method === "POST")) {
       const body = await readJson(req);
       const incoming = Array.isArray(body.nodes) ? body.nodes : [];
       // is_main 唯一：只认列表里第一个标记为主图的节点
