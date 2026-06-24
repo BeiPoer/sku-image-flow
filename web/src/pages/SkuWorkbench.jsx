@@ -529,7 +529,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
                 <div className="wb-retry-thumbs">
                   {retry.files.map((f, i) => (
                     <div className="wb-retry-thumb" key={i}>
-                      <img src={f.url} alt="" />
+                      <img src={f.url} alt="" onClick={() => onPreview(f.url)} />
                       <button className="wb-retry-thumb-x" onClick={() => removeRetryImage(i)} aria-label="移除"><IconClose size="small" /></button>
                     </div>
                   ))}
