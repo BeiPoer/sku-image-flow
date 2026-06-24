@@ -90,7 +90,7 @@ export default function TemplateSettings() {
       setInfo({
         name: t.name || "",
         description: t.description || "",
-        consistency_rules: t.consistency_rules || "",
+        consistency_rules: json.consistencyText || "",
         default_candidate_count: t.default_candidate_count ?? "",
       });
       setPhrases(parsePhrases(t.phrases));
@@ -258,7 +258,7 @@ export default function TemplateSettings() {
               placeholder="适用品类、风格，可留空"
             />
           </Form.Slot>
-          <Form.Slot label="通用一致性要求（每行一条，参与所有节点的生图提示词）">
+          <Form.Slot label="通用一致性要求（自由文本，会原样参与所有节点的生图提示词）">
             <TextArea
               value={info.consistency_rules}
               onChange={(v) => setInfo((s) => ({ ...s, consistency_rules: v }))}

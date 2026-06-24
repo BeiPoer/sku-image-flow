@@ -92,6 +92,22 @@ const consistencyRules = [
   "不得改变产品颜色、材质、表盘布局、包装结构和品牌标识。",
   "产品要真实、立体、清晰，不要水印，不要乱码，不要错误文字。"
 ];
+// 通用一致性要求统一以纯文本（多行）存储；下面是内置默认文本
+const DEFAULT_CONSISTENCY_TEXT = consistencyRules.join("\n");
+// 把"数组或字符串"规整成纯文本（兼容历史 JSON 数组 / 旧调用方传数组）
+function toConsistencyText(value) {
+  if (value == null) return "";
+  if (Array.isArray(value)) return value.map((s) => String(s)).join("\n");
+  const str = String(value);
+  // 历史数据可能存的是 JSON 数组字符串，转成换行文本
+  if (str.trim().startsWith("[")) {
+    try {
+      const list = JSON.parse(str);
+      if (Array.isArray(list)) return list.map((s) => String(s)).join("\n");
+    } catch { /* 不是合法 JSON，原样当文本 */ }
+  }
+  return str;
+}
 
 await ensureDirs();
 const db = initDb();
@@ -415,7 +431,7 @@ function createTemplate({ name, description, consistencyRules, defaultCandidateC
   db.prepare(`INSERT INTO template (id, name, description, consistency_rules, default_candidate_count, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(id, name, description || null,
-      consistencyRules && consistencyRules.length ? JSON.stringify(consistencyRules) : null,
+      (() => { const t = toConsistencyText(consistencyRules).trim(); return t || null; })(),
       defaultCandidateCount ?? null, ts, ts);
   if (Array.isArray(seedNodes)) {
     seedNodes.forEach((n, i) => insertTemplateNode(id, n, n.ord ?? i + 1));
@@ -428,16 +444,10 @@ function touchTemplate(id) {
 }
 
 // 模板有效的通用一致性要求：存了用存的，否则回退内置默认
-function templateConsistencyRules(template) {
-  if (template && template.consistency_rules) {
-    try {
-      const list = JSON.parse(template.consistency_rules);
-      if (Array.isArray(list) && list.length) return list.map((item) => String(item));
-    } catch {
-      // 忽略损坏的 JSON，回退默认
-    }
-  }
-  return consistencyRules;
+// 模板的通用一致性要求（纯文本，多行）；为空回退内置默认文本。兼容历史 JSON 数组。
+function templateConsistencyText(template) {
+  const text = toConsistencyText(template && template.consistency_rules).trim();
+  return text || DEFAULT_CONSISTENCY_TEXT;
 }
 
 // 内置「手表」预设的节点种子（迁移与「手表预设」新建共用）
@@ -530,11 +540,11 @@ function buildImageSegments({ node, sku, template, retryHint = "" }) {
     hint: "由「分析产品」自动生成，重新分析可更新；为空时不参与拼接",
     text: aLines.join("\n")
   });
-  const rules = templateConsistencyRules(template);
+  const rulesText = templateConsistencyText(template);
   segs.push({
-    kind: "consistency", label: "通用一致性要求", editable: true, present: true,
-    hint: "在模板的「节点设置」里修改通用一致性要求",
-    text: ["一致性要求：", ...rules.map((item) => `- ${item}`)].join("\n")
+    kind: "consistency", label: "通用一致性要求", editable: true, present: Boolean(rulesText),
+    hint: "在模板的「模板设置」里修改通用一致性要求",
+    text: rulesText ? `一致性要求：\n${rulesText}` : ""
   });
   const extra = Array.isArray(analysis?.consistencyRules) ? analysis.consistencyRules : [];
   segs.push({
@@ -786,7 +796,7 @@ async function handleApi(req, res, url) {
           node_key: n.key, ord: n.order, label: n.label, description: n.description,
           uses_selected_main: n.usesSelectedMain, is_main: n.isMain, prompt: n.prompt, aspect: n.defaultAspect
         }));
-        consistency = templateConsistencyRules(src);
+        consistency = templateConsistencyText(src);
         defCount = src.default_candidate_count;
       } else if (body.preset === "watch") {
         seedNodes = watchPresetNodes();
@@ -815,8 +825,8 @@ async function handleApi(req, res, url) {
     if (!sub && req.method === "GET") {
       return sendJson(res, 200, {
         template,
-        consistencyRules: templateConsistencyRules(template),
-        defaultConsistencyRules: consistencyRules,
+        consistencyText: templateConsistencyText(template),
+        defaultConsistencyText: DEFAULT_CONSISTENCY_TEXT,
         nodes: templateNodes(templateId)
       });
     }
@@ -824,17 +834,14 @@ async function handleApi(req, res, url) {
       const body = await readJson(req);
       const name = body.name === undefined ? template.name : (String(body.name).trim() || template.name);
       const description = body.description === undefined ? template.description : (String(body.description).trim() || null);
-      let rulesJson = template.consistency_rules;
+      let rulesText = template.consistency_rules;
       // 兼容前端两种字段名：consistencyRules（驼峰）/ consistency_rules（下划线）
       const rulesInput = body.consistencyRules !== undefined ? body.consistencyRules
         : (body.consistency_rules !== undefined ? body.consistency_rules : undefined);
       if (rulesInput !== undefined) {
-        const list = (Array.isArray(rulesInput)
-          ? rulesInput
-          : String(rulesInput).split(/\r?\n/)
-        ).map((line) => String(line).trim()).filter(Boolean);
-        const isDefault = list.length === consistencyRules.length && list.every((item, i) => item === consistencyRules[i]);
-        rulesJson = (!list.length || isDefault) ? null : JSON.stringify(list);
+        // 纯文本原样存（保留换行），空则置 null 以回退内置默认
+        const text = toConsistencyText(rulesInput).trim();
+        rulesText = text || null;
       }
       let defCount = template.default_candidate_count;
       const countInput = body.defaultCandidateCount !== undefined ? body.defaultCandidateCount
@@ -853,7 +860,7 @@ async function handleApi(req, res, url) {
         phrasesJson = list.length ? JSON.stringify(list) : null;
       }
       db.prepare("UPDATE template SET name = ?, description = ?, consistency_rules = ?, default_candidate_count = ?, phrases = ?, updated_at = ? WHERE id = ?")
-        .run(name, description, rulesJson, defCount, phrasesJson, now(), templateId);
+        .run(name, description, rulesText, defCount, phrasesJson, now(), templateId);
       return sendJson(res, 200, { template: getTemplate(templateId) });
     }
     if (!sub && req.method === "DELETE") {
