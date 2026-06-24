@@ -517,7 +517,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
 
       {/* 重跑：修正提示词 + 临时参考图（粘贴 / 拖拽） */}
       <div className="wb-retry">
-        <Collapse keepDOM>
+        <Collapse keepDOM defaultActiveKey="retry">
           <Collapse.Panel header={<Text type="tertiary" size="small">重跑修正（可选：补充提示词 / 粘贴或拖拽参考图）</Text>} itemKey="retry">
             <div
               className={"wb-retry-box" + (dragOver ? " dragover" : "")}
