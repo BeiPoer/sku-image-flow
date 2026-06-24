@@ -12,6 +12,7 @@ import {
   Tag,
   TextArea,
   Toast,
+  Popconfirm,
   Tooltip,
   Typography,
 } from "@douyinfe/semi-ui";
@@ -25,6 +26,7 @@ import {
   IconImage,
   IconStar,
   IconClose,
+  IconDelete,
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
 import AppHeader from "../components/AppHeader.jsx";
@@ -284,6 +286,16 @@ export default function SkuWorkbench() {
     }
   }
 
+  async function deleteCandidate(node, candidateId) {
+    try {
+      await api("/api/skus/" + skuId + "/candidates/" + candidateId, { method: "DELETE" });
+      await load();
+      Toast.success(node.label + "：已删除候选图");
+    } catch (e) {
+      Toast.error(e.message || "删除失败");
+    }
+  }
+
   // 一键生成：先主图；主图已选则跑所有依赖节点
   async function runAll() {
     if (!sourceAssets.length) {
@@ -478,6 +490,7 @@ export default function SkuWorkbench() {
               onAspect={(a) => setAspect(node, a)}
               onGenerate={() => generate(node)}
               onSelect={(cid) => selectCandidate(node, cid)}
+              onDeleteCandidate={(cid) => deleteCandidate(node, cid)}
               onPreview={setPreview}
               phrases={phrases}
               retry={retry[node.key] || { hint: "", files: [] }}
@@ -521,7 +534,7 @@ function NodeStatusIcon({ kind }) {
   return <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1px dashed var(--semi-color-border)" }} />;
 }
 
-function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onPreview, phrases, retry, setRetry }) {
+function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onDeleteCandidate, onPreview, phrases, retry, setRetry }) {
   const [dragOver, setDragOver] = useState(false);
   const selected = candidates.find((c) => c.selected);
   const locked = state.kind === "locked";
@@ -681,11 +694,29 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
               <div key={c.id} className={"wb-cand" + (c.selected ? " selected" : "")}>
                 <img src={c.url} className="wb-cand-img" alt="" onClick={() => onPreview(c.url)} />
                 <div className="wb-cand-bar">
-                  {c.selected ? (
-                    <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
-                  ) : (
-                    <Button size="small" theme="light" onClick={() => onSelect(c.id)}>选为最终图</Button>
-                  )}
+                  <div className="wb-cand-actions">
+                    {c.selected ? (
+                      <Tag color="green" prefixIcon={<IconTick />}>最终图</Tag>
+                    ) : (
+                      <Button size="small" theme="light" onClick={() => onSelect(c.id)}>选为最终图</Button>
+                    )}
+                  </div>
+                  <Popconfirm
+                    title="删除候选图"
+                    content="删除后会从工作台和本地文件中移除，无法恢复。"
+                    okType="danger"
+                    okText="删除"
+                    cancelText="取消"
+                    onConfirm={() => onDeleteCandidate(c.id)}
+                  >
+                    <Button
+                      icon={<IconDelete />}
+                      size="small"
+                      theme="borderless"
+                      type="danger"
+                      aria-label="删除候选图"
+                    />
+                  </Popconfirm>
                 </div>
               </div>
             ))}

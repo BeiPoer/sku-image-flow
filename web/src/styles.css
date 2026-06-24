@@ -337,8 +337,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 8px;
 }
+.wb-cand-actions { display: inline-flex; align-items: center; }
 
 .wb-retry { margin-top: 20px; }
 .wb-retry-box {

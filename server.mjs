@@ -369,6 +369,32 @@ function createCandidate({ skuId, taskId, nodeKey, filePath, prompt }) {
   return row("SELECT * FROM candidate_image WHERE id = ?", id);
 }
 
+function recomputeSkuStatus(skuId) {
+  const sku = getSku(skuId);
+  if (!sku) return "draft";
+  if (sku.selected_main_asset_id) return "main_selected";
+
+  const selectedCount = row("SELECT COUNT(*) AS n FROM candidate_image WHERE sku_id = ? AND selected = 1", skuId)?.n || 0;
+  if (selectedCount > 0) return "details_generated";
+
+  const template = sku.template_id ? getTemplate(sku.template_id) : null;
+  const mainNode = template ? row("SELECT node_key FROM template_node WHERE template_id = ? AND is_main = 1 ORDER BY ord ASC LIMIT 1", template.id) : null;
+  if (mainNode) {
+    const mainCount = row("SELECT COUNT(*) AS n FROM candidate_image WHERE sku_id = ? AND node_key = ?", skuId, mainNode.node_key)?.n || 0;
+    if (mainCount > 0) return "main_generated";
+  }
+
+  const candidateCount = row("SELECT COUNT(*) AS n FROM candidate_image WHERE sku_id = ?", skuId)?.n || 0;
+  if (candidateCount > 0) return "details_generated";
+
+  if (sku.analysis_json) return "analyzed";
+
+  const uploadCount = row("SELECT COUNT(*) AS n FROM asset WHERE sku_id = ? AND source_type = 'upload' AND role != 'retry'", skuId)?.n || 0;
+  if (uploadCount > 0) return "uploaded";
+
+  return "draft";
+}
+
 // ---- 模板与模板节点 ----
 
 // 把 template_node 行映射成拼接/前端用的节点对象（兼容历史字段名 key/order/usesSelectedMain/defaultAspect）
@@ -1090,6 +1116,31 @@ async function handleApi(req, res, url) {
     const candNode = getTemplateNode(sku.template_id, candidate.node_key);
     if (candNode.isMain) updateSku(skuId, { selected_main_asset_id: asset.id, status: "main_selected" });
     return sendJson(res, 200, { candidate: row("SELECT * FROM candidate_image WHERE id = ?", candidateId) });
+  }
+
+  if (req.method === "DELETE" && action === "candidates" && candidateId) {
+    const candidate = row("SELECT * FROM candidate_image WHERE id = ? AND sku_id = ?", candidateId, skuId);
+    if (!candidate) return sendJson(res, 404, { error: "候选图不存在" });
+
+    const candidateFile = candidate.file_path;
+    const selectedAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'selected' AND file_path = ?", skuId, candidateFile);
+    if (selectedAssets.some((asset) => asset.id === sku.selected_main_asset_id)) {
+      updateSku(skuId, { selected_main_asset_id: null });
+    }
+
+    db.prepare("UPDATE candidate_image SET selected = 0 WHERE sku_id = ? AND node_key = ?").run(skuId, candidate.node_key);
+    db.prepare("DELETE FROM candidate_image WHERE id = ? AND sku_id = ?").run(candidateId, skuId);
+    for (const asset of selectedAssets) {
+      db.prepare("DELETE FROM asset WHERE id = ? AND sku_id = ?").run(asset.id, skuId);
+    }
+
+    if (candidateFile && isInside(generatedDir, candidateFile) && existsSync(candidateFile)) {
+      await rm(candidateFile, { force: true });
+    }
+
+    const nextStatus = recomputeSkuStatus(skuId);
+    updateSku(skuId, { status: nextStatus });
+    return sendJson(res, 200, { ok: true, status: nextStatus });
   }
 
   if (req.method === "GET" && action === "export") {
