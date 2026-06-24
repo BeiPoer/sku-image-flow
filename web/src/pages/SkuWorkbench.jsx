@@ -553,29 +553,48 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
         </Collapse>
       </div>
 
-      {/* 生图提示词预览 */}
+      {/* 生图提示词预览：整篇文章，按来源用底色分块，hover 看「如何修改」 */}
       {Array.isArray(node.promptSegments) && (
         <div style={{ marginTop: 16 }}>
           <Collapse>
-            <Collapse.Panel header={<Text type="tertiary" size="small">生图提示词预览</Text>} itemKey="prompt">
-              <div className="wb-prompt">
-                {node.promptSegments
-                  .filter((seg) => seg.present && seg.text)
-                  .map((seg, i) => (
-                    <div key={i}>
-                      <div className="wb-prompt-seg-head">
-                        <Text strong size="small">{seg.label}</Text>
-                        {seg.editable && <Tag size="small" color="blue">可在设置里改</Tag>}
-                      </div>
-                      <pre className="wb-prompt-text">{seg.text}</pre>
-                    </div>
-                  ))}
-              </div>
+            <Collapse.Panel header={<Text type="tertiary" size="small">查看生图提示词（只读）</Text>} itemKey="prompt">
+              <PromptArticle segments={node.promptSegments} />
             </Collapse.Panel>
           </Collapse>
         </div>
       )}
     </Card>
+  );
+}
+
+// 生图提示词预览：把最终拼接的提示词当作一整篇文章，按真实顺序用换行连接，
+// 每段来源用底色高亮区分，hover 显示「如何修改」。内容只读。
+function PromptArticle({ segments }) {
+  const used = (segments || []).filter((s) => s.present && s.text);
+  const absent = (segments || []).filter((s) => !(s.present && s.text));
+  return (
+    <div className="pp">
+      <p className="pp-note">
+        下面是该节点最终发给生图接口的完整提示词。不同颜色代表不同来源，鼠标悬停任意高亮段可看「如何修改」。内容在此只读。
+      </p>
+      <div className="pp-article">
+        {used.map((s, i) => (
+          <span key={i}>
+            <span
+              className={"pp-seg pp-seg-" + s.kind + (s.editable ? " pp-rw" : " pp-ro")}
+              data-tip={(s.editable ? "可改 · " : "只读 · ") + s.label + "：" + (s.hint || "")}
+              tabIndex={0}
+            >
+              {s.text}
+            </span>
+            {i < used.length - 1 ? "\n" : null}
+          </span>
+        ))}
+      </div>
+      {absent.length > 0 && (
+        <p className="pp-absent">未参与本次拼接：{absent.map((s) => s.label).join("、")}</p>
+      )}
+    </div>
   );
 }
 
