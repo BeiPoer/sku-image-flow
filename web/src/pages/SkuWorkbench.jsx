@@ -24,7 +24,6 @@ import {
   IconLock,
   IconImage,
   IconStar,
-  IconPlus,
   IconClose,
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
@@ -166,7 +165,7 @@ export default function SkuWorkbench() {
         form.append("nodeKey", node.key);
         form.append("count", String(count));
         if (r.hint) form.append("retryHint", r.hint);
-        for (const f of r.files) form.append("file", f);
+        for (const f of r.files) form.append("file", f.file);
         options = { method: "POST", body: form };
       } else {
         options = {
@@ -176,6 +175,8 @@ export default function SkuWorkbench() {
         };
       }
       await api("/api/skus/" + skuId + "/generate", options);
+      // 提交成功，回收本次重跑图片的临时 URL 并清空
+      for (const f of r.files || []) if (f.url) URL.revokeObjectURL(f.url);
       setRetry((s) => ({ ...s, [node.key]: { hint: "", files: [] } }));
       await load();
       Toast.success(node.label + "：已生成候选");
@@ -389,17 +390,44 @@ function NodeStatusIcon({ kind }) {
 }
 
 function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, retry, setRetry }) {
-  const retryFileRef = useRef(null);
+  const [dragOver, setDragOver] = useState(false);
   const selected = candidates.find((c) => c.selected);
   const locked = state.kind === "locked";
+  const MAX_RETRY = 5;
 
-  function addRetryFiles(fileList) {
-    const files = Array.from(fileList || []);
-    if (files.length) setRetry({ files: [...(retry.files || []), ...files].slice(0, 5) });
-    if (retryFileRef.current) retryFileRef.current.value = "";
+  // 粘贴 / 拖拽进来的图片：存 { file, url }，url 创建一次，移除时回收，避免重复 createObjectURL
+  function addRetryImages(fileList) {
+    const incoming = Array.from(fileList || []).filter((f) => (f.type || "").startsWith("image/"));
+    if (!incoming.length) return;
+    const cur = retry.files || [];
+    const room = MAX_RETRY - cur.length;
+    if (room <= 0) {
+      Toast.info("每次重跑最多 " + MAX_RETRY + " 张参考图");
+      return;
+    }
+    const accepted = incoming.slice(0, room).map((file) => ({ file, url: URL.createObjectURL(file) }));
+    if (incoming.length > room) Toast.info("最多 " + MAX_RETRY + " 张，多余的已忽略");
+    setRetry({ files: [...cur, ...accepted] });
   }
-  function removeRetryFile(idx) {
-    setRetry({ files: retry.files.filter((_, i) => i !== idx) });
+  function removeRetryImage(idx) {
+    const cur = retry.files || [];
+    const removed = cur[idx];
+    if (removed && removed.url) URL.revokeObjectURL(removed.url);
+    setRetry({ files: cur.filter((_, i) => i !== idx) });
+  }
+  function onRetryPaste(e) {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    const files = [];
+    for (const item of items) {
+      if (item.kind === "file" && (item.type || "").startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      addRetryImages(files);
+    }
   }
 
   return (
@@ -469,17 +497,22 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
         !locked && <Empty image={<IconImage size="extra-large" />} description="还没有候选图，点右上「生成候选」。" style={{ padding: "24px 0" }} />
       )}
 
-      {/* 重跑：修正提示词 + 临时参考图 */}
+      {/* 重跑：修正提示词 + 临时参考图（粘贴 / 拖拽） */}
       <div className="wb-retry">
         <Collapse keepDOM>
-          <Collapse.Panel header={<Text type="tertiary" size="small">重跑修正（可选：补充提示词 / 上传修正参考图）</Text>} itemKey="retry">
-            <div className="wb-retry-box">
+          <Collapse.Panel header={<Text type="tertiary" size="small">重跑修正（可选：补充提示词 / 粘贴或拖拽参考图）</Text>} itemKey="retry">
+            <div
+              className={"wb-retry-box" + (dragOver ? " dragover" : "")}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(false); }}
+              onDrop={(e) => { e.preventDefault(); setDragOver(false); addRetryImages(e.dataTransfer?.files); }}
+            >
               {retry.files && retry.files.length > 0 && (
                 <div className="wb-retry-thumbs">
                   {retry.files.map((f, i) => (
                     <div className="wb-retry-thumb" key={i}>
-                      <img src={URL.createObjectURL(f)} alt="" />
-                      <button className="wb-retry-thumb-x" onClick={() => removeRetryFile(i)} aria-label="移除"><IconClose size="small" /></button>
+                      <img src={f.url} alt="" />
+                      <button className="wb-retry-thumb-x" onClick={() => removeRetryImage(i)} aria-label="移除"><IconClose size="small" /></button>
                     </div>
                   ))}
                 </div>
@@ -487,15 +520,12 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
               <textarea
                 className="wb-retry-input"
                 rows={2}
-                placeholder="本次重跑想强调/修正的重点，仅本次生成生效"
+                placeholder="本次重跑想强调/修正的重点，仅本次生效；可直接粘贴(Ctrl+V)或拖拽图片到此处，最多 5 张"
                 value={retry.hint || ""}
                 onChange={(e) => setRetry({ hint: e.target.value })}
+                onPaste={onRetryPaste}
               />
               <div className="wb-retry-actions">
-                <Button icon={<IconPlus />} size="small" theme="borderless" onClick={() => retryFileRef.current?.click()}>
-                  添加参考图
-                </Button>
-                <input ref={retryFileRef} type="file" accept="image/*" multiple hidden onChange={(e) => addRetryFiles(e.target.files)} />
                 <Button icon={<IconRefresh />} size="small" theme="solid" type="primary" loading={busy} disabled={locked} onClick={onGenerate}>
                   按修正重跑
                 </Button>

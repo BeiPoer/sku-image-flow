@@ -326,6 +326,12 @@ body {
   border-radius: var(--semi-border-radius-medium);
   padding: 10px;
   background: var(--semi-color-bg-1);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.wb-retry-box.dragover {
+  border-color: var(--semi-color-primary);
+  border-style: dashed;
+  background: var(--semi-color-primary-light-default);
 }
 .wb-retry-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .wb-retry-thumb { position: relative; width: 56px; height: 56px; }
