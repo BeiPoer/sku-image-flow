@@ -5,6 +5,8 @@ import {
   Card,
   Empty,
   Form,
+  RadioGroup,
+  Radio,
   Popconfirm,
   Spin,
   Tag,
@@ -19,6 +21,7 @@ import {
   IconCopy,
   IconChevronRight,
   IconLayers,
+  IconImage,
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
 import AppHeader from "../components/AppHeader.jsx";
@@ -32,7 +35,12 @@ export default function TemplatesHome() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const [copyingId, setCopyingId] = useState("");
+  const [createKind, setCreateKind] = useState("normal");
+  const [mirrorFiles, setMirrorFiles] = useState([]);
+  const [mirrorDragOver, setMirrorDragOver] = useState(false);
   const formApi = useRef(null);
+  const mirrorInputRef = useRef(null);
+  const mirrorFilesRef = useRef([]);
 
   async function load() {
     setLoading(true);
@@ -50,22 +58,74 @@ export default function TemplatesHome() {
     load();
   }, []);
 
+  useEffect(() => {
+    mirrorFilesRef.current = mirrorFiles;
+  }, [mirrorFiles]);
+
+  useEffect(() => () => {
+    for (const item of mirrorFilesRef.current) URL.revokeObjectURL(item.url);
+  }, []);
+
   async function handleCreate(values) {
-    // 固定空白创建（后端会预置一个主图首节点）
-    const payload = { name: values.name, description: values.description };
+    const name = values.name?.trim();
+    if (!name) {
+      Toast.warning("请填写模板名称");
+      return;
+    }
+    if (createKind === "mirror" && !mirrorFiles.length) {
+      Toast.warning("镜像模板至少需要上传 1 张参考图");
+      return;
+    }
     setSubmitting(true);
     try {
-      const json = await api("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      // 新建后进入模板设置页，先配置节点流程
+      let json;
+      if (createKind === "mirror") {
+        const form = new FormData();
+        form.append("name", name);
+        form.append("description", values.description || "");
+        for (const item of mirrorFiles) form.append("file", item.file);
+        json = await api("/api/templates/mirror", { method: "POST", body: form });
+      } else {
+        json = await api("/api/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, description: values.description }),
+        });
+      }
       navigate("/templates/" + json.template.id + "/settings");
     } catch (error) {
       Toast.error(error.message || "创建失败");
       setSubmitting(false);
     }
+  }
+
+  function addMirrorFiles(fileList) {
+    const incoming = Array.from(fileList || []).filter((file) => (file.type || "").startsWith("image/"));
+    if (!incoming.length) return;
+    setMirrorFiles((prev) => {
+      const room = 50 - prev.length;
+      if (room <= 0) {
+        Toast.info("镜像模板最多 50 张参考图");
+        return prev;
+      }
+      if (incoming.length > room) Toast.info("最多 50 张，多余的已忽略");
+      return [...prev, ...incoming.slice(0, room).map((file) => ({ file, url: URL.createObjectURL(file) }))];
+    });
+    if (mirrorInputRef.current) mirrorInputRef.current.value = "";
+  }
+
+  function removeMirrorFile(index) {
+    setMirrorFiles((prev) => {
+      const item = prev[index];
+      if (item?.url) URL.revokeObjectURL(item.url);
+      return prev.filter((_, i) => i !== index);
+    });
+  }
+
+  function handleMirrorDrop(e) {
+    e.preventDefault();
+    setMirrorDragOver(false);
+    addMirrorFiles(e.dataTransfer?.files);
   }
 
   async function handleCopy(tpl) {
@@ -99,12 +159,6 @@ export default function TemplatesHome() {
     }
   }
 
-  const modeOptions = [
-    { value: "watch", label: "内置「手表」预设（12 个节点）" },
-    { value: "blank", label: "从空白创建" },
-    ...templates.map((t) => ({ value: "copy:" + t.id, label: "复制：" + t.name })),
-  ];
-
   return (
     <div className="page">
       <AppHeader
@@ -115,7 +169,7 @@ export default function TemplatesHome() {
       <div className="hero">
         <Title heading={3} style={{ margin: 0 }}>详情图模板</Title>
         <Paragraph type="tertiary" style={{ marginTop: 6 }}>
-          每个模板是一套详情图节点流程，模板下可以创建多个 SKU。先建模板，再进入模板里建 SKU。
+          普通模板用节点提示词组织详情图流程；镜像模板用参考图自动形成复刻节点。
         </Paragraph>
       </div>
 
@@ -124,6 +178,12 @@ export default function TemplatesHome() {
           getFormApi={(a) => (formApi.current = a)}
           onSubmit={handleCreate}
         >
+          <Form.Slot label="模板类型">
+            <RadioGroup value={createKind} onChange={(e) => setCreateKind(e.target.value)} type="button" buttonSize="middle">
+              <Radio value="normal">普通模板</Radio>
+              <Radio value="mirror">镜像模板</Radio>
+            </RadioGroup>
+          </Form.Slot>
           <Form.Input
             field="name"
             label="模板名称"
@@ -136,6 +196,38 @@ export default function TemplatesHome() {
             placeholder="这套模板适用的品类、风格，可留空"
             autosize={{ minRows: 2, maxRows: 4 }}
           />
+          {createKind === "mirror" && (
+            <Form.Slot label="镜像参考图">
+              <div
+                className={"mirror-create" + (mirrorDragOver ? " dragover" : "")}
+                onDragOver={(e) => { e.preventDefault(); setMirrorDragOver(true); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setMirrorDragOver(false); }}
+                onDrop={handleMirrorDrop}
+              >
+                <div className="mirror-create-grid">
+                  {mirrorFiles.map((item, index) => (
+                    <div className="mirror-thumb" key={item.url}>
+                      <img src={item.url} alt="" />
+                      <button type="button" className="mirror-thumb-x" onClick={() => removeMirrorFile(index)}>×</button>
+                    </div>
+                  ))}
+                  <button type="button" className="mirror-upload-trigger" onClick={() => mirrorInputRef.current?.click()}>
+                    <IconImage />
+                    <Text size="small" type="tertiary">上传参考图</Text>
+                  </button>
+                </div>
+                <input
+                  ref={mirrorInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(e) => addMirrorFiles(e.target.files)}
+                />
+                <Text type="tertiary" size="small">每张参考图会成为一个镜像节点，顺序按上传顺序。可点击上传，也可把图片拖到这里。</Text>
+              </div>
+            </Form.Slot>
+          )}
           <Button
             theme="solid"
             type="primary"
@@ -143,7 +235,7 @@ export default function TemplatesHome() {
             loading={submitting}
             style={{ marginTop: 8 }}
           >
-            创建模板
+            {createKind === "mirror" ? "创建镜像模板" : "创建普通模板"}
           </Button>
         </Form>
       </Card>
@@ -182,7 +274,10 @@ export default function TemplatesHome() {
                   </Paragraph>
                 </a>
                 <div className="tpl-meta">
-                  <Tag color="grey">{t.node_count} 节点 · {t.sku_count} SKU</Tag>
+                  <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <Tag color={t.kind === "mirror" ? "violet" : "grey"}>{t.kind === "mirror" ? "镜像模板" : "普通模板"}</Tag>
+                    <Tag color="grey">{t.node_count} {t.kind === "mirror" ? "镜像节点" : "节点"} · {t.sku_count} SKU</Tag>
+                  </span>
                   <Text type="quaternary" size="small">
                     {new Date(t.updated_at).toLocaleString()}
                   </Text>

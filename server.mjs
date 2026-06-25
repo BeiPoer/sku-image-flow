@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createReadStream, existsSync } from "node:fs";
-import { mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = __dirname;
 const dataDir = path.join(rootDir, "data");
 const uploadDir = path.join(dataDir, "uploads");
+const templateUploadDir = path.join(dataDir, "template_uploads");
 const generatedDir = path.join(dataDir, "generated");
 const dbPath = path.join(dataDir, "app.db");
 const distDir = path.join(rootDir, "dist");
@@ -53,6 +54,7 @@ const ASPECT_SIZE = {
   "16:9": "1280x720",
   "9:16": "720x1280"
 };
+const MIRROR_TEMPLATE_MAX_IMAGES = 50;
 
 const nodes = [
   ["main", 1, "主图", "干净真实的产品主视觉，与详情页素材分开管理。", false, "生成一张电商产品主图，不要改变产品结构、logo、表盘、刻度、指针、表带材质和颜色。产品精修，产品置于纯净的纯白背景上。正视图,平角,3D渲染，精准还原产品颜色与包装材质(如玻璃+通道,塑料的哑光,金属的光泽)。清除所有指纹，灰尘与瑕疵，让产品看起来崭新，手表立体感强，提升整体感和高级感。标签/文字需清晰锐利。光线条和均匀，突出产品精致感，符合电商主图标准，表盘刻度和数字要清晰完整，不要模糊缺失，特别是logo的图案要正确无误，而且立体"],
@@ -123,6 +125,7 @@ async function ensureDirs() {
   await Promise.all([
     mkdir(dataDir, { recursive: true }),
     mkdir(uploadDir, { recursive: true }),
+    mkdir(templateUploadDir, { recursive: true }),
     mkdir(generatedDir, { recursive: true })
   ]);
 }
@@ -188,6 +191,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS template (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'normal',
       description TEXT,
       consistency_rules TEXT,
       default_candidate_count INTEGER,
@@ -210,14 +214,29 @@ function initDb() {
       FOREIGN KEY (template_id) REFERENCES template(id) ON DELETE CASCADE,
       UNIQUE (template_id, node_key)
     );
+    CREATE TABLE IF NOT EXISTS template_image (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      node_key TEXT NOT NULL,
+      ord INTEGER NOT NULL,
+      file_path TEXT NOT NULL,
+      original_name TEXT,
+      aspect TEXT NOT NULL DEFAULT '1:1',
+      deleted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (template_id) REFERENCES template(id) ON DELETE CASCADE,
+      UNIQUE (template_id, node_key)
+    );
     CREATE INDEX IF NOT EXISTS idx_asset_sku ON asset(sku_id);
     CREATE INDEX IF NOT EXISTS idx_task_sku ON generation_task(sku_id);
     CREATE INDEX IF NOT EXISTS idx_candidate_sku_node ON candidate_image(sku_id, node_key);
     CREATE INDEX IF NOT EXISTS idx_tnode_template ON template_node(template_id);
+    CREATE INDEX IF NOT EXISTS idx_timage_template ON template_image(template_id);
   `);
   ensureColumn(database, "sku", "candidate_count", "candidate_count INTEGER");
   ensureColumn(database, "sku", "node_aspects_json", "node_aspects_json TEXT");
   ensureColumn(database, "sku", "template_id", "template_id TEXT");
+  ensureColumn(database, "template", "kind", "kind TEXT NOT NULL DEFAULT 'normal'");
   ensureColumn(database, "template", "phrases", "phrases TEXT");
   return database;
 }
@@ -228,6 +247,66 @@ function now() {
 
 function safeFileName(name) {
   return (name || "file").replace(/[^a-zA-Z0-9._\-\u4e00-\u9fa5]/g, "_").replace(/_+/g, "_").slice(0, 90) || "file";
+}
+
+function stripHeaderQuotes(value) {
+  const text = String(value || "").trim();
+  if (text.startsWith('"') && text.endsWith('"')) return text.slice(1, -1).replace(/\\"/g, '"');
+  return text;
+}
+
+function decodeBinaryHeaderValue(value) {
+  const text = stripHeaderQuotes(value);
+  if (!text) return "";
+  const decoded = Buffer.from(text, "binary").toString("utf8");
+  return decoded.includes("\uFFFD") ? text : decoded;
+}
+
+function decodeRfc5987HeaderValue(value) {
+  const text = stripHeaderQuotes(value);
+  const match = /^([^']*)'[^']*'(.*)$/.exec(text);
+  const charset = (match?.[1] || "utf-8").toLowerCase();
+  const encoded = match ? match[2] : text;
+  const bytes = [];
+  for (let i = 0; i < encoded.length; i += 1) {
+    if (encoded[i] === "%" && i + 2 < encoded.length) {
+      const byte = Number.parseInt(encoded.slice(i + 1, i + 3), 16);
+      if (Number.isFinite(byte)) {
+        bytes.push(byte);
+        i += 2;
+        continue;
+      }
+    }
+    bytes.push(encoded.charCodeAt(i));
+  }
+  try {
+    return new TextDecoder(charset).decode(Buffer.from(bytes));
+  } catch {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      return decodeBinaryHeaderValue(text);
+    }
+  }
+}
+
+function decodeMultipartFileName({ filename, filenameStar } = {}) {
+  return filenameStar ? decodeRfc5987HeaderValue(filenameStar) : decodeBinaryHeaderValue(filename);
+}
+
+function repairMojibakeFileName(name) {
+  const text = String(name || "");
+  if (!text || !/[\u00c0-\u00ff]/.test(text)) return text;
+  for (const ch of text) {
+    if (ch.charCodeAt(0) > 255) return text;
+  }
+  const repaired = Buffer.from(text, "latin1").toString("utf8");
+  if (!repaired || repaired.includes("\uFFFD")) return text;
+  return /[\u4e00-\u9fff]/.test(repaired) ? repaired : text;
+}
+
+function displayOriginalName(name) {
+  return repairMojibakeFileName(name);
 }
 
 function inferMime(filePathOrName) {
@@ -241,6 +320,59 @@ function extensionFromMime(mime) {
   if (mime?.includes("jpeg")) return ".jpg";
   if (mime?.includes("webp")) return ".webp";
   return ".png";
+}
+
+function parseImageSize(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 16) return null;
+  if (buffer.length >= 24 && buffer.readUInt32BE(0) === 0x89504e47 && buffer.toString("ascii", 1, 4) === "PNG") {
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < buffer.length) {
+      if (buffer[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      const marker = buffer[offset + 1];
+      const length = buffer.readUInt16BE(offset + 2);
+      if (!length || offset + 2 + length > buffer.length) break;
+      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+        return { width: buffer.readUInt16BE(offset + 7), height: buffer.readUInt16BE(offset + 5) };
+      }
+      offset += 2 + length;
+    }
+  }
+  if (buffer.toString("ascii", 0, 4) === "RIFF" && buffer.toString("ascii", 8, 12) === "WEBP") {
+    const type = buffer.toString("ascii", 12, 16);
+    if (type === "VP8X" && buffer.length >= 30) {
+      const width = 1 + buffer.readUIntLE(24, 3);
+      const height = 1 + buffer.readUIntLE(27, 3);
+      return { width, height };
+    }
+    if (type === "VP8 " && buffer.length >= 30) {
+      return { width: buffer.readUInt16LE(26) & 0x3fff, height: buffer.readUInt16LE(28) & 0x3fff };
+    }
+    if (type === "VP8L" && buffer.length >= 25) {
+      const bits = buffer.readUInt32LE(21);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+    }
+  }
+  return null;
+}
+
+function aspectFromBuffer(buffer) {
+  const size = parseImageSize(buffer);
+  if (!size || !size.width || !size.height) return "1:1";
+  const ratio = size.width / size.height;
+  const candidates = [
+    ["1:1", 1],
+    ["3:4", 3 / 4],
+    ["4:3", 4 / 3],
+    ["16:9", 16 / 9],
+    ["9:16", 9 / 16]
+  ];
+  return candidates.reduce((best, cur) => (Math.abs(cur[1] - ratio) < Math.abs(best[1] - ratio) ? cur : best))[0];
 }
 
 function row(statement, ...args) {
@@ -378,7 +510,9 @@ function recomputeSkuStatus(skuId) {
   if (selectedCount > 0) return "details_generated";
 
   const template = sku.template_id ? getTemplate(sku.template_id) : null;
-  const mainNode = template ? row("SELECT node_key FROM template_node WHERE template_id = ? AND is_main = 1 ORDER BY ord ASC LIMIT 1", template.id) : null;
+  const mainNode = template && template.kind !== "mirror"
+    ? row("SELECT node_key FROM template_node WHERE template_id = ? AND is_main = 1 ORDER BY ord ASC LIMIT 1", template.id)
+    : null;
   if (mainNode) {
     const mainCount = row("SELECT COUNT(*) AS n FROM candidate_image WHERE sku_id = ? AND node_key = ?", skuId, mainNode.node_key)?.n || 0;
     if (mainCount > 0) return "main_generated";
@@ -412,6 +546,41 @@ function mapNodeRow(r) {
   };
 }
 
+function mapTemplateImageRow(r) {
+  const originalName = displayOriginalName(r.original_name || "");
+  return {
+    id: r.id,
+    template_id: r.template_id,
+    node_key: r.node_key,
+    order: r.ord,
+    file_path: r.file_path,
+    original_name: originalName,
+    aspect: r.aspect || "1:1",
+    deleted: Boolean(r.deleted),
+    created_at: r.created_at,
+    url: `/api/file?path=${encodeURIComponent(r.file_path)}`
+  };
+}
+
+function mapMirrorNodeRow(r) {
+  const order = r.ord;
+  return {
+    key: r.node_key,
+    order,
+    label: `镜像图 ${String(order).padStart(2, "0")}`,
+    description: "参考模板图的构图、场景、光影、背景、视角、布局和整体风格生成复刻图。",
+    usesSelectedMain: false,
+    isMain: false,
+    prompt: "",
+    defaultAspect: r.aspect || "1:1",
+    deleted: Boolean(r.deleted),
+    kind: "mirror",
+    referenceImageId: r.id,
+    referenceUrl: `/api/file?path=${encodeURIComponent(r.file_path)}`,
+    referenceName: displayOriginalName(r.original_name || "")
+  };
+}
+
 function getTemplate(id) {
   return row("SELECT * FROM template WHERE id = ?", id);
 }
@@ -426,7 +595,28 @@ function templateNodes(templateId, { includeDeleted = false } = {}) {
   return rows(`SELECT * FROM template_node WHERE template_id = ?${extra} ORDER BY ord ASC`, templateId).map(mapNodeRow);
 }
 
+function templateImages(templateId, { includeDeleted = false } = {}) {
+  const extra = includeDeleted ? "" : " AND deleted = 0";
+  return rows(`SELECT * FROM template_image WHERE template_id = ?${extra} ORDER BY ord ASC`, templateId).map(mapTemplateImageRow);
+}
+
+function mirrorNodes(templateId, { includeDeleted = false } = {}) {
+  const extra = includeDeleted ? "" : " AND deleted = 0";
+  return rows(`SELECT * FROM template_image WHERE template_id = ?${extra} ORDER BY ord ASC`, templateId).map(mapMirrorNodeRow);
+}
+
+function templateNodeList(template, options = {}) {
+  if (!template) return [];
+  return template.kind === "mirror" ? mirrorNodes(template.id, options) : templateNodes(template.id, options);
+}
+
 function getTemplateNode(templateId, key) {
+  const template = getTemplate(templateId);
+  if (template?.kind === "mirror") {
+    const image = row("SELECT * FROM template_image WHERE template_id = ? AND node_key = ?", templateId, key);
+    if (!image) throw new Error(`未知图片节点：${key}`);
+    return mapMirrorNodeRow(image);
+  }
   const r = row("SELECT * FROM template_node WHERE template_id = ? AND node_key = ?", templateId, key);
   if (!r) throw new Error(`未知图片节点：${key}`);
   return mapNodeRow(r);
@@ -451,15 +641,23 @@ function nextNodeKey(templateId) {
   return key;
 }
 
-function createTemplate({ name, description, consistencyRules, defaultCandidateCount, nodes: seedNodes }) {
+function nextMirrorNodeKey(templateId) {
+  const used = new Set(rows("SELECT node_key FROM template_image WHERE template_id = ?", templateId).map((r) => r.node_key));
+  let key;
+  do { key = "mirror_" + randomUUID().slice(0, 8); } while (used.has(key));
+  return key;
+}
+
+function createTemplate({ name, description, consistencyRules, defaultCandidateCount, nodes: seedNodes, kind = "normal" }) {
   const id = randomUUID();
   const ts = now();
-  db.prepare(`INSERT INTO template (id, name, description, consistency_rules, default_candidate_count, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, name, description || null,
+  const safeKind = kind === "mirror" ? "mirror" : "normal";
+  db.prepare(`INSERT INTO template (id, name, kind, description, consistency_rules, default_candidate_count, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, name, safeKind, description || null,
       (() => { const t = toConsistencyText(consistencyRules).trim(); return t || null; })(),
       defaultCandidateCount ?? null, ts, ts);
-  if (Array.isArray(seedNodes)) {
+  if (safeKind !== "mirror" && Array.isArray(seedNodes)) {
     seedNodes.forEach((n, i) => insertTemplateNode(id, n, n.ord ?? i + 1));
   }
   return getTemplate(id);
@@ -467,6 +665,49 @@ function createTemplate({ name, description, consistencyRules, defaultCandidateC
 
 function touchTemplate(id) {
   db.prepare("UPDATE template SET updated_at = ? WHERE id = ?").run(now(), id);
+}
+
+async function insertTemplateImageFromFile(templateId, file, ord) {
+  if (!(file.contentType || "").startsWith("image/")) return null;
+  const currentCount = row("SELECT COUNT(*) AS n FROM template_image WHERE template_id = ? AND deleted = 0", templateId)?.n || 0;
+  if (currentCount >= MIRROR_TEMPLATE_MAX_IMAGES) {
+    throw new Error(`镜像模板最多 ${MIRROR_TEMPLATE_MAX_IMAGES} 张参考图`);
+  }
+  const id = randomUUID();
+  const originalName = displayOriginalName(file.filename || "参考图");
+  const ext = path.extname(originalName) || extensionFromMime(file.contentType);
+  const dir = path.join(templateUploadDir, templateId);
+  await mkdir(dir, { recursive: true });
+  const filePath = path.join(dir, `${Date.now()}_${id}_${safeFileName(path.basename(originalName, ext))}${ext}`);
+  await writeFile(filePath, file.buffer);
+  const aspect = aspectFromBuffer(file.buffer);
+  const nodeKey = nextMirrorNodeKey(templateId);
+  const order = ord ?? ((row("SELECT COALESCE(MAX(ord), 0) AS n FROM template_image WHERE template_id = ?", templateId)?.n || 0) + 1);
+  db.prepare(`INSERT INTO template_image (id, template_id, node_key, ord, file_path, original_name, aspect, deleted, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+    .run(id, templateId, nodeKey, order, filePath, originalName || null, aspect, now());
+  return mapTemplateImageRow(row("SELECT * FROM template_image WHERE id = ?", id));
+}
+
+async function copyMirrorTemplateImages(sourceTemplateId, targetTemplateId) {
+  const images = rows("SELECT * FROM template_image WHERE template_id = ? AND deleted = 0 ORDER BY ord ASC", sourceTemplateId);
+  const dir = path.join(templateUploadDir, targetTemplateId);
+  await mkdir(dir, { recursive: true });
+  for (const image of images) {
+    const id = randomUUID();
+    const ext = path.extname(image.file_path) || ".png";
+    const filePath = path.join(dir, `${Date.now()}_${id}_${safeFileName(path.basename(image.original_name || image.file_path, ext))}${ext}`);
+    await copyFile(image.file_path, filePath);
+    db.prepare(`INSERT INTO template_image (id, template_id, node_key, ord, file_path, original_name, aspect, deleted, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`)
+      .run(id, targetTemplateId, nextMirrorNodeKey(targetTemplateId), image.ord, filePath, image.original_name || null, image.aspect || "1:1", now());
+  }
+}
+
+async function removeTemplateFiles(templateId) {
+  const dir = path.join(templateUploadDir, templateId);
+  if (!isInside(templateUploadDir, dir)) throw new Error("删除路径越界。");
+  await rm(dir, { recursive: true, force: true });
 }
 
 // 模板有效的通用一致性要求：存了用存的，否则回退内置默认
@@ -534,6 +775,24 @@ function parseAspects(raw) {
   }
 }
 
+function normalizeCandidateCount(value, fallback = config.defaultCandidates) {
+  const parsed = Number.parseInt(String(value), 10);
+  return Math.max(1, Math.min(8, Number.isFinite(parsed) && parsed > 0 ? parsed : fallback));
+}
+
+function effectiveCandidateCount({ requested, sku, template }) {
+  if (requested !== undefined && requested !== null && requested !== "") {
+    return normalizeCandidateCount(requested);
+  }
+  if (sku?.candidate_count !== undefined && sku?.candidate_count !== null && sku?.candidate_count !== "") {
+    return normalizeCandidateCount(sku.candidate_count);
+  }
+  if (template?.default_candidate_count !== undefined && template?.default_candidate_count !== null && template?.default_candidate_count !== "") {
+    return normalizeCandidateCount(template.default_candidate_count);
+  }
+  return normalizeCandidateCount(config.defaultCandidates);
+}
+
 // 生图提示词分块：单一数据源。预览展示用它，实际拼接也用它，保证两者完全一致。
 // 每块：kind 类型；label 显示名；hint 「如何修改」提示；editable 是否可由用户改；
 //       present 本次是否参与拼接；text 该块拼进最终提示词的完整文本。
@@ -592,10 +851,52 @@ function buildImageSegments({ node, sku, template, retryHint = "" }) {
 }
 
 function buildImagePrompt(args) {
-  return buildImageSegments(args)
+  return (args.template?.kind === "mirror" ? buildMirrorImageSegments(args) : buildImageSegments(args))
     .filter((seg) => seg.present && seg.text)
     .map((seg) => seg.text)
     .join("\n");
+}
+
+function buildMirrorImageSegments({ node, sku, retryHint = "" }) {
+  const segs = [];
+  segs.push({
+    kind: "mirror_task", label: "镜像复刻任务", editable: false, present: true,
+    hint: "固定规则：来自镜像模板参考图，不在节点里单独编辑",
+    text: "任务：以第一张模板参考图为主要视觉参考，复刻它的构图、场景、光影、背景、视角、布局和整体风格。"
+  });
+  segs.push({
+    kind: "mirror_product", label: "商品替换要求", editable: false, present: true,
+    hint: "固定规则：第二张图是当前 SKU 商品图",
+    text: "商品替换：把模板参考图中的商品替换为当前 SKU 商品图中的商品，必须保持 SKU 商品的外观结构、颜色、logo、材质、细节和比例，不要沿用模板图里的原商品。"
+  });
+  segs.push({
+    kind: "sku_name", label: "SKU / 产品名称", editable: false, present: true,
+    hint: "来自新建 SKU 时填写的名称",
+    text: `SKU/产品名称：${sku.name}`
+  });
+  segs.push({
+    kind: "notes", label: "SKU 全局提示词", editable: true, present: Boolean(sku.notes),
+    hint: "在镜像 SKU 工作台的「SKU 全局提示词」里修改",
+    text: sku.notes ? `SKU 全局提示词：${sku.notes}` : ""
+  });
+  segs.push({
+    kind: "retry", label: "本次节点修正", editable: true, present: Boolean(retryHint),
+    hint: "重跑时在该节点上方输入框填写，仅本次生成生效",
+    text: retryHint ? `本次节点修正：${retryHint}` : ""
+  });
+  segs.push({
+    kind: "output", label: "输出要求", editable: false, present: true,
+    hint: "固定内容，如需修改请改源码 buildMirrorImageSegments",
+    text: "输出要求：生成高质量电商图，商品主体清晰，画面自然真实，无水印，无乱码，无错误文字。"
+  });
+  if (node?.referenceName) {
+    segs.push({
+      kind: "reference", label: "模板参考图", editable: false, present: false,
+      hint: "来自镜像模板上传的参考图文件",
+      text: `模板参考图：${node.referenceName}`
+    });
+  }
+  return segs;
 }
 
 function buildAnalysisPrompt(sku) {
@@ -677,13 +978,18 @@ async function parseMultipart(req, contentType) {
     if (body.endsWith("\r\n")) body = body.slice(0, -2);
     const nameMatch = /name="([^"]+)"/i.exec(rawHeaders);
     if (!nameMatch) continue;
+    const filenameStarMatch = /filename\*=([^;\r\n]+)/i.exec(rawHeaders);
     const filenameMatch = /filename="([^"]*)"/i.exec(rawHeaders);
     const contentTypeMatch = /Content-Type:\s*([^\r\n]+)/i.exec(rawHeaders);
     const valueBuffer = Buffer.from(body, "binary");
-    if (filenameMatch && filenameMatch[1]) {
+    const filename = decodeMultipartFileName({
+      filename: filenameMatch?.[1] || "",
+      filenameStar: filenameStarMatch?.[1] || ""
+    });
+    if (filename) {
       files.push({
         fieldName: nameMatch[1],
-        filename: filenameMatch[1],
+        filename,
         contentType: contentTypeMatch?.[1] || "application/octet-stream",
         buffer: valueBuffer
       });
@@ -804,7 +1110,10 @@ async function handleApi(req, res, url) {
     if (req.method === "GET") {
       const list = rows(`SELECT t.*,
         (SELECT COUNT(*) FROM sku WHERE template_id = t.id) AS sku_count,
-        (SELECT COUNT(*) FROM template_node WHERE template_id = t.id AND deleted = 0) AS node_count
+        CASE
+          WHEN t.kind = 'mirror' THEN (SELECT COUNT(*) FROM template_image WHERE template_id = t.id AND deleted = 0)
+          ELSE (SELECT COUNT(*) FROM template_node WHERE template_id = t.id AND deleted = 0)
+        END AS node_count
         FROM template t ORDER BY t.created_at ASC`);
       return sendJson(res, 200, { templates: list });
     }
@@ -815,13 +1124,19 @@ async function handleApi(req, res, url) {
       let seedNodes = [];
       let consistency = consistencyRules;
       let defCount = null;
+      let kind = "normal";
+      let copiedTemplate = null;
       if (body.copyFrom) {
         const src = getTemplate(body.copyFrom);
         if (!src) return sendJson(res, 400, { error: "源模板不存在" });
-        seedNodes = templateNodes(body.copyFrom).map((n) => ({
-          node_key: n.key, ord: n.order, label: n.label, description: n.description,
-          uses_selected_main: n.usesSelectedMain, is_main: n.isMain, prompt: n.prompt, aspect: n.defaultAspect
-        }));
+        copiedTemplate = src;
+        kind = src.kind === "mirror" ? "mirror" : "normal";
+        if (kind === "normal") {
+          seedNodes = templateNodes(body.copyFrom).map((n) => ({
+            node_key: n.key, ord: n.order, label: n.label, description: n.description,
+            uses_selected_main: n.usesSelectedMain, is_main: n.isMain, prompt: n.prompt, aspect: n.defaultAspect
+          }));
+        }
         consistency = templateConsistencyText(src);
         defCount = src.default_candidate_count;
       } else if (body.preset === "watch") {
@@ -835,11 +1150,44 @@ async function handleApi(req, res, url) {
       }
       const tpl = createTemplate({
         name, description: body.description?.trim() || null,
-        consistencyRules: consistency, defaultCandidateCount: defCount, nodes: seedNodes
+        consistencyRules: consistency, defaultCandidateCount: defCount, nodes: seedNodes, kind
       });
+      if (kind === "mirror" && copiedTemplate) {
+        await copyMirrorTemplateImages(copiedTemplate.id, tpl.id);
+      }
       return sendJson(res, 200, { template: tpl });
     }
     return sendJson(res, 405, { error: "方法不被支持" });
+  }
+
+  if (url.pathname === "/api/templates/mirror") {
+    if (req.method !== "POST") return sendJson(res, 405, { error: "方法不被支持" });
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) return sendJson(res, 400, { error: "请使用 multipart/form-data 上传镜像模板参考图" });
+    const { fields, files } = await parseMultipart(req, contentType);
+    const name = fields.name?.trim();
+    if (!name) return sendJson(res, 400, { error: "模板名称不能为空" });
+    const imageFiles = files.filter((file) => (file.contentType || "").startsWith("image/")).slice(0, MIRROR_TEMPLATE_MAX_IMAGES);
+    if (!imageFiles.length) return sendJson(res, 400, { error: "镜像模板至少需要 1 张参考图" });
+    const tpl = createTemplate({
+      name,
+      description: fields.description?.trim() || null,
+      consistencyRules: null,
+      defaultCandidateCount: null,
+      nodes: [],
+      kind: "mirror"
+    });
+    try {
+      for (const [index, file] of imageFiles.entries()) {
+        await insertTemplateImageFromFile(tpl.id, file, index + 1);
+      }
+      touchTemplate(tpl.id);
+      return sendJson(res, 200, { template: getTemplate(tpl.id), templateImages: templateImages(tpl.id), nodes: mirrorNodes(tpl.id) });
+    } catch (error) {
+      db.prepare("DELETE FROM template WHERE id = ?").run(tpl.id);
+      await removeTemplateFiles(tpl.id);
+      throw error;
+    }
   }
 
   const tplMatch = /^\/api\/templates\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname);
@@ -849,11 +1197,13 @@ async function handleApi(req, res, url) {
     if (!template) return sendJson(res, 404, { error: "模板不存在" });
 
     if (!sub && req.method === "GET") {
+      const nodes = templateNodeList(template);
       return sendJson(res, 200, {
         template,
         consistencyText: templateConsistencyText(template),
         defaultConsistencyText: DEFAULT_CONSISTENCY_TEXT,
-        nodes: templateNodes(templateId)
+        nodes,
+        templateImages: template.kind === "mirror" ? templateImages(templateId) : []
       });
     }
     if (!sub && (req.method === "PATCH" || req.method === "PUT")) {
@@ -873,7 +1223,7 @@ async function handleApi(req, res, url) {
       const countInput = body.defaultCandidateCount !== undefined ? body.defaultCandidateCount
         : (body.default_candidate_count !== undefined ? body.default_candidate_count : undefined);
       if (countInput !== undefined) {
-        defCount = (countInput === null || countInput === "") ? null : Math.max(1, Math.min(8, Number.parseInt(String(countInput), 10) || config.defaultCandidates));
+        defCount = (countInput === null || countInput === "") ? null : normalizeCandidateCount(countInput);
       }
       // 短语：最多 50 条，每条 100 字内，去空
       let phrasesJson = template.phrases;
@@ -893,6 +1243,7 @@ async function handleApi(req, res, url) {
       const used = row("SELECT COUNT(*) AS n FROM sku WHERE template_id = ?", templateId);
       if (used && used.n > 0) return sendJson(res, 400, { error: `该模板下还有 ${used.n} 个 SKU，请先删除或迁移后再删模板` });
       db.prepare("DELETE FROM template WHERE id = ?").run(templateId);
+      if (template.kind === "mirror") await removeTemplateFiles(templateId);
       return sendJson(res, 200, { template });
     }
     if (sub === "skus" && req.method === "GET") {
@@ -908,7 +1259,58 @@ async function handleApi(req, res, url) {
       });
       return sendJson(res, 200, { template, skus: list });
     }
+    if (sub === "images") {
+      if (template.kind !== "mirror") return sendJson(res, 400, { error: "只有镜像模板支持参考图管理" });
+      if (req.method === "POST") {
+        const contentType = req.headers["content-type"] || "";
+        if (!contentType.includes("multipart/form-data")) return sendJson(res, 400, { error: "请使用 multipart/form-data 上传参考图" });
+        const { files } = await parseMultipart(req, contentType);
+        const imageFiles = files.filter((file) => (file.contentType || "").startsWith("image/"));
+        if (!imageFiles.length) return sendJson(res, 400, { error: "没有收到图片文件" });
+        const activeCount = row("SELECT COUNT(*) AS n FROM template_image WHERE template_id = ? AND deleted = 0", templateId)?.n || 0;
+        if (activeCount + imageFiles.length > MIRROR_TEMPLATE_MAX_IMAGES) {
+          return sendJson(res, 400, { error: `镜像模板最多 ${MIRROR_TEMPLATE_MAX_IMAGES} 张参考图` });
+        }
+        const maxOrd = row("SELECT COALESCE(MAX(ord), 0) AS n FROM template_image WHERE template_id = ?", templateId)?.n || 0;
+        for (const [index, file] of imageFiles.entries()) {
+          await insertTemplateImageFromFile(templateId, file, maxOrd + index + 1);
+        }
+        touchTemplate(templateId);
+        return sendJson(res, 200, { template: getTemplate(templateId), templateImages: templateImages(templateId), nodes: mirrorNodes(templateId) });
+      }
+      if (req.method === "PUT") {
+        const body = await readJson(req);
+        const incoming = Array.isArray(body.images) ? body.images : [];
+        const existing = rows("SELECT * FROM template_image WHERE template_id = ? AND deleted = 0", templateId);
+        const existingById = new Map(existing.map((r) => [r.id, r]));
+        const keptIds = [];
+        for (const item of incoming) {
+          const id = typeof item === "string" ? item : item?.id;
+          if (id && existingById.has(id) && !keptIds.includes(id)) keptIds.push(id);
+        }
+        if (!keptIds.length) return sendJson(res, 400, { error: "镜像模板至少需要保留 1 张参考图" });
+        db.exec("BEGIN");
+        try {
+          keptIds.forEach((id, index) => {
+            const item = incoming.find((value) => (typeof value === "string" ? value : value?.id) === id);
+            const aspect = ASPECT_SIZE[item?.aspect] ? item.aspect : existingById.get(id).aspect;
+            db.prepare("UPDATE template_image SET ord = ?, aspect = ?, deleted = 0 WHERE id = ? AND template_id = ?").run(index + 1, aspect || "1:1", id, templateId);
+          });
+          for (const r of existing) {
+            if (!keptIds.includes(r.id)) db.prepare("UPDATE template_image SET deleted = 1 WHERE id = ? AND template_id = ?").run(r.id, templateId);
+          }
+          db.exec("COMMIT");
+        } catch (txErr) {
+          db.exec("ROLLBACK");
+          throw txErr;
+        }
+        touchTemplate(templateId);
+        return sendJson(res, 200, { template: getTemplate(templateId), templateImages: templateImages(templateId), nodes: mirrorNodes(templateId) });
+      }
+      return sendJson(res, 405, { error: "方法不被支持" });
+    }
     if (sub === "nodes" && (req.method === "PUT" || req.method === "POST")) {
+      if (template.kind === "mirror") return sendJson(res, 400, { error: "镜像模板不支持普通节点设置" });
       const body = await readJson(req);
       const incoming = Array.isArray(body.nodes) ? body.nodes : [];
       // is_main 唯一：只认列表里第一个标记为主图的节点
@@ -990,13 +1392,29 @@ async function handleApi(req, res, url) {
     }));
     const tasks = rows("SELECT * FROM generation_task WHERE sku_id = ? ORDER BY created_at DESC", skuId);
     const template = getTemplate(sku.template_id);
+    const skuAspects = parseAspects(sku.node_aspects_json);
     // 每个节点附带提示词分块预览（不含重跑修正，那是临时输入）
-    const nodesWithPrompt = templateNodes(sku.template_id).map((node) => ({
-      ...node,
-      promptSegments: buildImageSegments({ node, sku, template, retryHint: "" })
-    }));
+    const nodesWithPrompt = templateNodeList(template).map((node) => {
+      const aspect = template?.kind === "mirror" ? (node.defaultAspect || "1:1") : (skuAspects[node.key] || node.defaultAspect || "1:1");
+      return {
+        ...node,
+        aspect,
+        promptSegments: template?.kind === "mirror"
+          ? buildMirrorImageSegments({ node, sku, template, retryHint: "" })
+          : buildImageSegments({ node, sku, template, retryHint: "" })
+      };
+    });
     const defaultCount = (template && template.default_candidate_count) || config.defaultCandidates;
-    return sendJson(res, 200, { sku, template, assets, candidates, tasks, nodes: nodesWithPrompt, defaults: { candidateCount: defaultCount } });
+    return sendJson(res, 200, {
+      sku,
+      template,
+      assets,
+      candidates,
+      tasks,
+      nodes: nodesWithPrompt,
+      templateImages: template?.kind === "mirror" ? templateImages(template.id) : [],
+      defaults: { candidateCount: defaultCount }
+    });
   }
 
   if (req.method === "POST" && action === "upload") {
@@ -1006,7 +1424,18 @@ async function handleApi(req, res, url) {
     const saved = [];
     const dir = path.join(uploadDir, skuId);
     await mkdir(dir, { recursive: true });
-    for (const file of files) {
+    const template = getTemplate(sku.template_id);
+    const acceptedFiles = template?.kind === "mirror" && role === "source" ? files.slice(0, 1) : files;
+    if (template?.kind === "mirror" && role === "source") {
+      const oldAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'upload' AND role = 'source'", skuId);
+      for (const old of oldAssets) {
+        db.prepare("DELETE FROM asset WHERE id = ? AND sku_id = ?").run(old.id, skuId);
+        if (old.file_path && isInside(uploadDir, old.file_path) && existsSync(old.file_path)) {
+          await rm(old.file_path, { force: true });
+        }
+      }
+    }
+    for (const file of acceptedFiles) {
       const ext = path.extname(file.filename) || extensionFromMime(file.contentType);
       const filePath = path.join(dir, `${Date.now()}_${role}_${safeFileName(path.basename(file.filename, ext))}${ext}`);
       await writeFile(filePath, file.buffer);
@@ -1038,18 +1467,24 @@ async function handleApi(req, res, url) {
 
   if (req.method === "POST" && action === "settings") {
     const body = await readJson(req);
+    const template = getTemplate(sku.template_id);
     const aspects = parseAspects(sku.node_aspects_json);
     let count = sku.candidate_count;
     if (body.count !== undefined && body.count !== null && body.count !== "") {
-      count = Math.max(1, Math.min(8, Number.parseInt(String(body.count), 10) || config.defaultCandidates));
+      count = normalizeCandidateCount(body.count);
+    }
+    let notes = sku.notes;
+    if (body.notes !== undefined) {
+      notes = String(body.notes || "").trim() || null;
     }
     if (body.nodeKey) {
+      if (template?.kind === "mirror") return sendJson(res, 400, { error: "镜像模板节点比例由参考图决定" });
       getTemplateNode(sku.template_id, body.nodeKey);
       if (!ASPECT_SIZE[body.aspect]) return sendJson(res, 400, { error: "不支持的图片比例" });
       aspects[body.nodeKey] = body.aspect;
     }
-    db.prepare("UPDATE sku SET candidate_count = ?, node_aspects_json = ?, updated_at = ? WHERE id = ?")
-      .run(count ?? null, JSON.stringify(aspects), now(), skuId);
+    db.prepare("UPDATE sku SET candidate_count = ?, node_aspects_json = ?, notes = ?, updated_at = ? WHERE id = ?")
+      .run(count ?? null, JSON.stringify(aspects), notes, now(), skuId);
     return sendJson(res, 200, { sku: getSku(skuId) });
   }
 
@@ -1066,13 +1501,26 @@ async function handleApi(req, res, url) {
     }
     const node = getTemplateNode(sku.template_id, body.nodeKey);
     const template = getTemplate(sku.template_id);
-    const uploadedAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'upload' ORDER BY created_at ASC", skuId);
+    const uploadedAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'upload' AND role != 'retry' ORDER BY created_at ASC", skuId);
     if (!uploadedAssets.length) return sendJson(res, 400, { error: "请先上传产品图" });
-    const referenceAssets = [...uploadedAssets];
-    if (node.usesSelectedMain) {
+    let referenceAssets = [];
+    let inputAssetIds = [];
+    if (template?.kind === "mirror") {
+      const templateImage = row("SELECT * FROM template_image WHERE template_id = ? AND node_key = ? AND deleted = 0", sku.template_id, node.key);
+      if (!templateImage) return sendJson(res, 400, { error: "镜像参考图不存在或已删除" });
+      referenceAssets = [templateImage, uploadedAssets[0]];
+      inputAssetIds = [`template_image:${templateImage.id}`, uploadedAssets[0].id];
+    } else {
+      referenceAssets = [...uploadedAssets];
+      inputAssetIds = referenceAssets.map((asset) => asset.id);
+    }
+    if (template?.kind !== "mirror" && node.usesSelectedMain) {
       if (!sku.selected_main_asset_id) return sendJson(res, 400, { error: "请先选择一张主图" });
       const selectedMain = row("SELECT * FROM asset WHERE id = ?", sku.selected_main_asset_id);
-      if (selectedMain) referenceAssets.push(selectedMain);
+      if (selectedMain) {
+        referenceAssets.push(selectedMain);
+        inputAssetIds.push(selectedMain.id);
+      }
     }
     // 本次重跑临时上传的修正参考图：与文字提示一起作为生成输入
     if (retryFiles.length) {
@@ -1082,14 +1530,16 @@ async function handleApi(req, res, url) {
         const ext = path.extname(file.filename) || extensionFromMime(file.contentType);
         const filePath = path.join(retryDir, `${Date.now()}_retry_${safeFileName(path.basename(file.filename, ext))}${ext}`);
         await writeFile(filePath, file.buffer);
-        referenceAssets.push(createAsset({ skuId, role: "retry", filePath, sourceType: "upload" }));
+        const retryAsset = createAsset({ skuId, role: "retry", filePath, sourceType: "upload" });
+        referenceAssets.push(retryAsset);
+        inputAssetIds.push(retryAsset.id);
       }
     }
     const prompt = buildImagePrompt({ node, sku, template, retryHint: body.retryHint || "" });
-    const count = Math.max(1, Math.min(8, Number.parseInt(String(body.count || sku.candidate_count || config.defaultCandidates), 10)));
-    const aspect = parseAspects(sku.node_aspects_json)[node.key] || node.defaultAspect || "1:1";
+    const count = effectiveCandidateCount({ requested: body.count, sku, template });
+    const aspect = template?.kind === "mirror" ? (node.defaultAspect || "1:1") : (parseAspects(sku.node_aspects_json)[node.key] || node.defaultAspect || "1:1");
     const size = ASPECT_SIZE[aspect] || ASPECT_SIZE["1:1"];
-    const task = createTask({ skuId, nodeKey: node.key, prompt, inputAssetIds: referenceAssets.map((asset) => asset.id) });
+    const task = createTask({ skuId, nodeKey: node.key, prompt, inputAssetIds });
     try {
       const results = await generateImages({ prompt, count, referenceAssets, size });
       const candidates = [];
@@ -1149,7 +1599,8 @@ async function handleApi(req, res, url) {
     const files = [];
     const prompts = [];
     const meta = [];
-    for (const node of templateNodes(sku.template_id, { includeDeleted: true })) {
+    const template = getTemplate(sku.template_id);
+    for (const node of templateNodeList(template, { includeDeleted: true })) {
       const candidate = selected.find((item) => item.node_key === node.key);
       if (!candidate) continue;
       const ext = path.extname(candidate.file_path) || ".png";

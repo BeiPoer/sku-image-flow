@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Button,
@@ -21,6 +21,7 @@ import {
   IconArrowDown,
   IconSave,
   IconStar,
+  IconImage,
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
 import AppHeader from "../components/AppHeader.jsx";
@@ -28,6 +29,36 @@ import AppHeader from "../components/AppHeader.jsx";
 const { Title, Paragraph, Text } = Typography;
 
 const ASPECT_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"].map((v) => ({ value: v, label: v }));
+const MIRROR_ASPECT_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"].map((v) => ({ value: v, label: aspectLabel(v) }));
+
+function aspectLabel(value) {
+  const cls = "aspect-graphic " + aspectClass(value);
+  return (
+    <span className="aspect-option">
+      <span className={cls} aria-hidden="true">
+        <span className="aspect-inner" />
+      </span>
+      <span className="aspect-text">{value}</span>
+    </span>
+  );
+}
+
+function aspectClass(value) {
+  switch (value) {
+    case "1:1":
+      return "is-square";
+    case "3:4":
+      return "is-portrait";
+    case "4:3":
+      return "is-landscape";
+    case "16:9":
+      return "is-wide";
+    case "9:16":
+      return "is-tall";
+    default:
+      return "is-square";
+  }
+}
 
 let tempSeq = 0;
 function blankNode() {
@@ -77,16 +108,23 @@ export default function TemplateSettings() {
   const [savingInfo, setSavingInfo] = useState(false);
   const [savingNodes, setSavingNodes] = useState(false);
   const [info, setInfo] = useState({ name: "", description: "", consistency_rules: "", default_candidate_count: "" });
+  const [templateKind, setTemplateKind] = useState("normal");
   const [phrases, setPhrases] = useState([]);
   const [newPhrase, setNewPhrase] = useState("");
   const [savingPhrases, setSavingPhrases] = useState(false);
   const [nodes, setNodes] = useState([]);
+  const [templateImages, setTemplateImages] = useState([]);
+  const [savingImages, setSavingImages] = useState(false);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageDragOver, setImageDragOver] = useState(false);
+  const imageInputRef = useRef(null);
 
   async function load() {
     setLoading(true);
     try {
       const json = await api("/api/templates/" + encodeURIComponent(templateId));
       const t = json.template;
+      setTemplateKind(t.kind || "normal");
       setInfo({
         name: t.name || "",
         description: t.description || "",
@@ -95,6 +133,7 @@ export default function TemplateSettings() {
       });
       setPhrases(parsePhrases(t.phrases));
       setNodes((json.nodes || []).map(fromServer));
+      setTemplateImages(json.templateImages || []);
     } catch (error) {
       Toast.error(error.message || "加载失败");
     } finally {
@@ -111,15 +150,16 @@ export default function TemplateSettings() {
     setSavingInfo(true);
     try {
       const countRaw = String(info.default_candidate_count).trim();
+      const payload = {
+        name: info.name,
+        description: info.description,
+        default_candidate_count: countRaw === "" ? null : Number(countRaw),
+      };
+      if (templateKind !== "mirror") payload.consistency_rules = info.consistency_rules;
       await api("/api/templates/" + encodeURIComponent(templateId), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: info.name,
-          description: info.description,
-          consistency_rules: info.consistency_rules,
-          default_candidate_count: countRaw === "" ? null : Number(countRaw),
-        }),
+        body: JSON.stringify(payload),
       });
       Toast.success("模板信息已保存");
     } catch (error) {
@@ -194,6 +234,73 @@ export default function TemplateSettings() {
     });
   }
 
+  function moveImage(index, dir) {
+    setTemplateImages((prev) => {
+      const next = [...prev];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }
+
+  function removeImage(id) {
+    if (templateImages.length <= 1) {
+      Toast.warning("镜像模板至少保留 1 张参考图");
+      return;
+    }
+    setTemplateImages((prev) => prev.filter((item) => item.id !== id));
+  }
+
+  async function saveImages() {
+    if (!templateImages.length) {
+      Toast.warning("镜像模板至少保留 1 张参考图");
+      return;
+    }
+    setSavingImages(true);
+    try {
+      const json = await api("/api/templates/" + encodeURIComponent(templateId) + "/images", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ images: templateImages.map((item) => ({ id: item.id, aspect: item.aspect || "1:1" })) }),
+      });
+      setTemplateImages(json.templateImages || []);
+      Toast.success("参考图设置已保存");
+    } catch (error) {
+      Toast.error(error.message || "保存失败");
+    } finally {
+      setSavingImages(false);
+    }
+  }
+
+  async function uploadImages(fileList) {
+    const files = Array.from(fileList || []).filter((file) => (file.type || "").startsWith("image/"));
+    if (!files.length) return;
+    setUploadingImages(true);
+    try {
+      const form = new FormData();
+      for (const file of files) form.append("file", file);
+      const json = await api("/api/templates/" + encodeURIComponent(templateId) + "/images", { method: "POST", body: form });
+      setTemplateImages(json.templateImages || []);
+      Toast.success("已追加 " + files.length + " 张参考图");
+    } catch (error) {
+      Toast.error(error.message || "上传失败");
+    } finally {
+      setUploadingImages(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  }
+
+  function patchImage(id, patch) {
+    setTemplateImages((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function handleImageDrop(e) {
+    e.preventDefault();
+    setImageDragOver(false);
+    uploadImages(e.dataTransfer?.files);
+  }
+
   function removeNode(uid) {
     setNodes((prev) => prev.filter((n) => n._uid !== uid));
   }
@@ -241,7 +348,7 @@ export default function TemplateSettings() {
     <div className="page">
       <AppHeader
         title={info.name || "模板设置"}
-        subtitle="模板信息、短语与详情图节点流程"
+        subtitle={templateKind === "mirror" ? "模板信息、短语与镜像参考图" : "模板信息、短语与详情图节点流程"}
         backTo={"/templates/" + templateId}
       />
 
@@ -258,14 +365,16 @@ export default function TemplateSettings() {
               placeholder="适用品类、风格，可留空"
             />
           </Form.Slot>
-          <Form.Slot label="通用一致性要求（自由文本，会原样参与所有节点的生图提示词）">
-            <TextArea
-              value={info.consistency_rules}
-              onChange={(v) => setInfo((s) => ({ ...s, consistency_rules: v }))}
-              autosize={{ minRows: 3, maxRows: 8 }}
-              placeholder="例如：保持产品 logo、表盘刻度、配色一致"
-            />
-          </Form.Slot>
+          {templateKind !== "mirror" && (
+            <Form.Slot label="通用一致性要求（自由文本，会原样参与所有节点的生图提示词）">
+              <TextArea
+                value={info.consistency_rules}
+                onChange={(v) => setInfo((s) => ({ ...s, consistency_rules: v }))}
+                autosize={{ minRows: 3, maxRows: 8 }}
+                placeholder="例如：保持产品 logo、表盘刻度、配色一致"
+              />
+            </Form.Slot>
+          )}
           <Form.Slot label="默认候选张数（每个节点每次生成的候选图数量，留空用全局默认）">
             <Input
               type="number"
@@ -329,80 +438,144 @@ export default function TemplateSettings() {
         )}
       </Card>
 
-      <Card
-        className="panel"
-        title={<span className="panel-title">节点流程（{nodes.length}）</span>}
-        headerExtraContent={
-          <Button icon={<IconPlus />} theme="light" onClick={() => setNodes((p) => [...p, blankNode()])}>
-            添加节点
-          </Button>
-        }
-      >
-        <Paragraph type="tertiary" style={{ marginBottom: 16 }}>
-          顺序即生成与导出顺序。标记「主图」的节点产出主图（只能有一个）；标记「依赖已选主图」的节点，需先在主图节点选定一张图后才能生成。
-        </Paragraph>
-
-        <div className="node-list">
-          {nodes.map((n, i) => (
-            <div className="node-row" key={n._uid}>
-              <div className="node-row-head">
+      {templateKind === "mirror" ? (
+        <Card
+          className="panel"
+          title={<span className="panel-title"><IconImage /> 镜像参考图（{templateImages.length}）</span>}
+          headerExtraContent={
+            <>
+              <Button icon={<IconPlus />} theme="light" loading={uploadingImages} onClick={() => imageInputRef.current?.click()}>
+                追加参考图
+              </Button>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                hidden
+                onChange={(e) => uploadImages(e.target.files)}
+              />
+            </>
+          }
+        >
+          <Paragraph type="tertiary" style={{ marginBottom: 16 }}>
+            每张参考图就是一个镜像节点。这里只管理参考图的顺序、比例和增删，不配置节点提示词或主图依赖。可点击追加，也可把图片拖到下方区域。
+          </Paragraph>
+          <div
+            className={"mirror-image-list" + (imageDragOver ? " dragover" : "")}
+            onDragOver={(e) => { e.preventDefault(); setImageDragOver(true); }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setImageDragOver(false); }}
+            onDrop={handleImageDrop}
+          >
+            {templateImages.map((img, i) => (
+              <div className="mirror-image-row" key={img.id}>
                 <div className="node-order">{i + 1}</div>
-                <Input
-                  value={n.label}
-                  onChange={(v) => patchNode(n._uid, { label: v })}
-                  placeholder="节点名称"
-                  prefix={n.isMain ? <IconStar style={{ color: "var(--semi-color-warning)" }} /> : undefined}
-                  style={{ flex: 1 }}
-                />
+                <img src={img.url} alt="" className="mirror-image-preview" />
+                <div className="mirror-image-info">
+                  <Text strong>镜像图 {String(i + 1).padStart(2, "0")}</Text>
+                  <Text type="tertiary" size="small">{img.original_name || "参考图"}</Text>
+                  <Text type="quaternary" size="small">key: {img.node_key}</Text>
+                </div>
                 <Select
-                  value={n.aspect}
-                  onChange={(v) => patchNode(n._uid, { aspect: v })}
-                  optionList={ASPECT_OPTIONS}
-                  style={{ width: 96 }}
+                  value={img.aspect || "1:1"}
+                  onChange={(value) => patchImage(img.id, { aspect: value })}
+                  optionList={MIRROR_ASPECT_OPTIONS}
+                  size="small"
+                  style={{ width: 120 }}
                 />
-                <Button icon={<IconArrowUp />} theme="borderless" size="small" disabled={i === 0} onClick={() => move(i, -1)} aria-label="上移" />
-                <Button icon={<IconArrowDown />} theme="borderless" size="small" disabled={i === nodes.length - 1} onClick={() => move(i, 1)} aria-label="下移" />
-                <Popconfirm title="删除节点" content="保存后该节点将被软删除，历史图片仍保留。" okType="danger" okText="删除" cancelText="取消" onConfirm={() => removeNode(n._uid)}>
+                <Button icon={<IconArrowUp />} theme="borderless" size="small" disabled={i === 0} onClick={() => moveImage(i, -1)} aria-label="上移" />
+                <Button icon={<IconArrowDown />} theme="borderless" size="small" disabled={i === templateImages.length - 1} onClick={() => moveImage(i, 1)} aria-label="下移" />
+                <Popconfirm title="删除参考图" content="保存后该参考图会从镜像节点中移除，历史候选图仍保留。" okType="danger" okText="删除" cancelText="取消" onConfirm={() => removeImage(img.id)}>
                   <Button icon={<IconDelete />} theme="borderless" type="danger" size="small" aria-label="删除" />
                 </Popconfirm>
               </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+            <Button theme="solid" type="primary" icon={<IconSave />} loading={savingImages} onClick={saveImages}>
+              保存参考图设置
+            </Button>
+            <Button theme="borderless" onClick={() => navigate("/templates/" + templateId)}>
+              返回 SKU 列表
+            </Button>
+          </div>
+        </Card>
+      ) : (
+        <Card
+          className="panel"
+          title={<span className="panel-title">节点流程（{nodes.length}）</span>}
+          headerExtraContent={
+            <Button icon={<IconPlus />} theme="light" onClick={() => setNodes((p) => [...p, blankNode()])}>
+              添加节点
+            </Button>
+          }
+        >
+          <Paragraph type="tertiary" style={{ marginBottom: 16 }}>
+            顺序即生成与导出顺序。标记「主图」的节点产出主图（只能有一个）；标记「依赖已选主图」的节点，需先在主图节点选定一张图后才能生成。
+          </Paragraph>
 
-              <div className="node-row-toggles">
-                <span className="node-toggle">
-                  <Switch checked={n.isMain} onChange={(v) => setMain(n._uid, v)} size="small" />
-                  <Text size="small">设为主图节点</Text>
-                </span>
-                <span className="node-toggle">
-                  <Switch
-                    checked={n.usesSelectedMain}
-                    onChange={(v) => patchNode(n._uid, { usesSelectedMain: v })}
-                    size="small"
-                    disabled={n.isMain}
+          <div className="node-list">
+            {nodes.map((n, i) => (
+              <div className="node-row" key={n._uid}>
+                <div className="node-row-head">
+                  <div className="node-order">{i + 1}</div>
+                  <Input
+                    value={n.label}
+                    onChange={(v) => patchNode(n._uid, { label: v })}
+                    placeholder="节点名称"
+                    prefix={n.isMain ? <IconStar style={{ color: "var(--semi-color-warning)" }} /> : undefined}
+                    style={{ flex: 1 }}
                   />
-                  <Text size="small" type={n.isMain ? "quaternary" : undefined}>依赖已选主图</Text>
-                </span>
-                {n.node_key ? <Text type="quaternary" size="small">key: {n.node_key}</Text> : <Text type="tertiary" size="small">（新节点，保存后分配 key）</Text>}
+                  <Select
+                    value={n.aspect}
+                    onChange={(v) => patchNode(n._uid, { aspect: v })}
+                    optionList={ASPECT_OPTIONS}
+                    style={{ width: 96 }}
+                  />
+                  <Button icon={<IconArrowUp />} theme="borderless" size="small" disabled={i === 0} onClick={() => move(i, -1)} aria-label="上移" />
+                  <Button icon={<IconArrowDown />} theme="borderless" size="small" disabled={i === nodes.length - 1} onClick={() => move(i, 1)} aria-label="下移" />
+                  <Popconfirm title="删除节点" content="保存后该节点将被软删除，历史图片仍保留。" okType="danger" okText="删除" cancelText="取消" onConfirm={() => removeNode(n._uid)}>
+                    <Button icon={<IconDelete />} theme="borderless" type="danger" size="small" aria-label="删除" />
+                  </Popconfirm>
+                </div>
+
+                <div className="node-row-toggles">
+                  <span className="node-toggle">
+                    <Switch checked={n.isMain} onChange={(v) => setMain(n._uid, v)} size="small" />
+                    <Text size="small">设为主图节点</Text>
+                  </span>
+                  <span className="node-toggle">
+                    <Switch
+                      checked={n.usesSelectedMain}
+                      onChange={(v) => patchNode(n._uid, { usesSelectedMain: v })}
+                      size="small"
+                      disabled={n.isMain}
+                    />
+                    <Text size="small" type={n.isMain ? "quaternary" : undefined}>依赖已选主图</Text>
+                  </span>
+                  {n.node_key ? <Text type="quaternary" size="small">key: {n.node_key}</Text> : <Text type="tertiary" size="small">（新节点，保存后分配 key）</Text>}
+                </div>
+
+                <TextArea
+                  value={n.prompt}
+                  onChange={(v) => patchNode(n._uid, { prompt: v })}
+                  autosize={{ minRows: 2, maxRows: 6 }}
+                  placeholder="该节点的生图提示词"
+                />
               </div>
+            ))}
+          </div>
 
-              <TextArea
-                value={n.prompt}
-                onChange={(v) => patchNode(n._uid, { prompt: v })}
-                autosize={{ minRows: 2, maxRows: 6 }}
-                placeholder="该节点的生图提示词"
-              />
-            </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-          <Button theme="solid" type="primary" icon={<IconSave />} loading={savingNodes} onClick={saveNodes}>
-            保存节点
-          </Button>
-          <Button theme="borderless" onClick={() => navigate("/templates/" + templateId)}>
-            返回 SKU 列表
-          </Button>
-        </div>
-      </Card>
+          <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+            <Button theme="solid" type="primary" icon={<IconSave />} loading={savingNodes} onClick={saveNodes}>
+              保存节点
+            </Button>
+            <Button theme="borderless" onClick={() => navigate("/templates/" + templateId)}>
+              返回 SKU 列表
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

@@ -33,7 +33,42 @@ import AppHeader from "../components/AppHeader.jsx";
 
 const { Title, Paragraph, Text } = Typography;
 
-const ASPECT_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"].map((v) => ({ value: v, label: v }));
+const ASPECT_OPTIONS = [
+  { value: "1:1", label: aspectLabel("1:1") },
+  { value: "3:4", label: aspectLabel("3:4") },
+  { value: "4:3", label: aspectLabel("4:3") },
+  { value: "16:9", label: aspectLabel("16:9") },
+  { value: "9:16", label: aspectLabel("9:16") },
+];
+
+function aspectLabel(value) {
+  const cls = "aspect-graphic " + aspectClass(value);
+  return (
+    <span className="aspect-option">
+      <span className={cls} aria-hidden="true">
+        <span className="aspect-inner" />
+      </span>
+      <span className="aspect-text">{value}</span>
+    </span>
+  );
+}
+
+function aspectClass(value) {
+  switch (value) {
+    case "1:1":
+      return "is-square";
+    case "3:4":
+      return "is-portrait";
+    case "4:3":
+      return "is-landscape";
+    case "16:9":
+      return "is-wide";
+    case "9:16":
+      return "is-tall";
+    default:
+      return "is-square";
+  }
+}
 
 export default function SkuWorkbench() {
   const { skuId } = useParams();
@@ -48,6 +83,8 @@ export default function SkuWorkbench() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [retry, setRetry] = useState({}); // nodeKey -> { hint, files: File[] }
   const [count, setCount] = useState(4);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
   const [preview, setPreview] = useState(""); // 放大预览的图片 src，空串=关闭
   const sourceInputRef = useRef(null);
 
@@ -55,6 +92,7 @@ export default function SkuWorkbench() {
     const json = await api("/api/skus/" + encodeURIComponent(skuId));
     setData(json);
     setCount(json.sku.candidate_count || json.defaults?.candidateCount || 4);
+    setNotesDraft(json.sku.notes || "");
     setActiveNode((prev) => prev || (json.nodes[0] && json.nodes[0].key) || "");
     return json;
   }, [skuId]);
@@ -101,6 +139,7 @@ export default function SkuWorkbench() {
   }
 
   const { sku, template, assets, candidates, nodes } = data;
+  const isMirror = template?.kind === "mirror";
   // 模板级短语（重跑快填用）
   let phrases = [];
   if (template && template.phrases) {
@@ -133,12 +172,13 @@ export default function SkuWorkbench() {
   async function uploadSource(fileList) {
     const files = Array.from(fileList || []);
     if (!files.length) return;
+    const uploadFiles = isMirror ? files.slice(0, 1) : files;
     const form = new FormData();
     form.append("role", "source");
-    for (const f of files) form.append("file", f);
+    for (const f of uploadFiles) form.append("file", f);
     try {
       await api("/api/skus/" + skuId + "/upload", { method: "POST", body: form });
-      Toast.success("已上传 " + files.length + " 张产品图");
+      Toast.success(isMirror ? "商品图已更新" : "已上传 " + uploadFiles.length + " 张产品图");
       await load();
     } catch (e) {
       Toast.error(e.message || "上传失败");
@@ -156,6 +196,23 @@ export default function SkuWorkbench() {
       Toast.error(e.message || "分析失败");
     } finally {
       setAnalyzing(false);
+    }
+  }
+
+  async function saveNotes() {
+    setSavingNotes(true);
+    try {
+      await api("/api/skus/" + skuId + "/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesDraft }),
+      });
+      Toast.success(isMirror ? "SKU 全局提示词已保存" : "补充备注已保存");
+      await load();
+    } catch (e) {
+      Toast.error(e.message || "保存失败");
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -238,7 +295,7 @@ export default function SkuWorkbench() {
       return;
     }
     if (!sourceAssets.length) {
-      Toast.warning("请先上传产品图");
+      Toast.warning(isMirror ? "请先上传商品图" : "请先上传产品图");
       return;
     }
     const r = retry[node.key] || {};
@@ -299,13 +356,15 @@ export default function SkuWorkbench() {
   // 一键生成：先主图；主图已选则跑所有依赖节点
   async function runAll() {
     if (!sourceAssets.length) {
-      Toast.warning("请先上传产品图");
+      Toast.warning(isMirror ? "请先上传商品图" : "请先上传产品图");
       return;
     }
     setBatchRunning(true);
     try {
       let targets;
-      if (mainNode && !hasSelectedMain) {
+      if (isMirror) {
+        targets = nodes;
+      } else if (mainNode && !hasSelectedMain) {
         targets = [mainNode];
       } else {
         targets = nodes.filter((n) => !n.isMain);
@@ -332,7 +391,7 @@ export default function SkuWorkbench() {
         }
       }
       await load();
-      if (mainNode && !hasSelectedMain) {
+      if (!isMirror && mainNode && !hasSelectedMain) {
         setActiveNode(mainNode.key);
         Toast.success("主图候选已生成，选定主图后再次点「一键生成」自动跑完详情节点。");
       } else {
@@ -357,7 +416,7 @@ export default function SkuWorkbench() {
     <div className="page wb-page">
       <AppHeader
         title={sku.name}
-        subtitle={template ? template.name + " · 工作台" : "工作台"}
+        subtitle={template ? template.name + (isMirror ? " · 镜像工作台" : " · 工作台") : "工作台"}
         backTo={template ? "/templates/" + template.id : "/"}
         right={
           <span style={{ display: "inline-flex", gap: 8 }}>
@@ -371,8 +430,7 @@ export default function SkuWorkbench() {
         }
       />
 
-      {/* 产品图 + 分析 */}
-      <Card className="panel" title={<span className="panel-title"><IconImage /> 产品图与分析</span>}>
+      <Card className="panel" title={<span className="panel-title"><IconImage /> {isMirror ? "商品图与全局提示词" : "产品图与分析"}</span>}>
         <div className="wb-product">
           <div className="wb-thumbs">
             {sourceAssets.map((a) => (
@@ -380,77 +438,97 @@ export default function SkuWorkbench() {
             ))}
             <button className="wb-upload-trigger" onClick={() => sourceInputRef.current?.click()}>
               <IconUpload />
-              <Text size="small" type="tertiary">上传产品图</Text>
+              <Text size="small" type="tertiary">{isMirror ? (sourceAssets.length ? "替换商品图" : "上传商品图") : "上传产品图"}</Text>
             </button>
             <input
               ref={sourceInputRef}
               type="file"
               accept="image/*"
-              multiple
+              multiple={!isMirror}
               hidden
               onChange={(e) => uploadSource(e.target.files)}
             />
           </div>
 
-          <div className="wb-analysis">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <Text strong>产品分析</Text>
-              {!editingAnalysis && (
-                <div style={{ display: "inline-flex", gap: 8 }}>
-                  {analysis && (
-                    <Button size="small" theme="borderless" onClick={() => startEditAnalysis(analysis)}>
-                      编辑
+          {isMirror ? (
+            <div className="wb-analysis">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <Text strong>SKU 全局提示词</Text>
+                <Button size="small" theme="solid" type="primary" loading={savingNotes} onClick={saveNotes}>
+                  保存
+                </Button>
+              </div>
+              <TextArea
+                value={notesDraft}
+                onChange={setNotesDraft}
+                autosize={{ minRows: 3, maxRows: 8 }}
+                placeholder="可选：会参与该 SKU 下所有镜像节点生成，例如强调材质、质感、品牌调性或要避免的元素"
+              />
+              <Text type="tertiary" size="small" style={{ display: "block", marginTop: 8 }}>
+                镜像模板不做产品分析；生成时会使用模板参考图、这张商品图、SKU 全局提示词和节点级重跑修正。
+              </Text>
+            </div>
+          ) : (
+            <div className="wb-analysis">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <Text strong>产品分析</Text>
+                {!editingAnalysis && (
+                  <div style={{ display: "inline-flex", gap: 8 }}>
+                    {analysis && (
+                      <Button size="small" theme="borderless" onClick={() => startEditAnalysis(analysis)}>
+                        编辑
+                      </Button>
+                    )}
+                    <Button
+                      icon={<IconRefresh />}
+                      size="small"
+                      theme="light"
+                      loading={analyzing}
+                      disabled={!sourceAssets.length}
+                      onClick={analyze}
+                    >
+                      {analysis ? "重新分析" : "分析产品"}
                     </Button>
-                  )}
-                  <Button
-                    icon={<IconRefresh />}
-                    size="small"
-                    theme="light"
-                    loading={analyzing}
-                    disabled={!sourceAssets.length}
-                    onClick={analyze}
-                  >
-                    {analysis ? "重新分析" : "分析产品"}
-                  </Button>
+                  </div>
+                )}
+              </div>
+
+              {editingAnalysis ? (
+                <div className="wb-analysis-edit">
+                  <label>品类</label>
+                  <Input value={analysisDraft.category} onChange={(v) => setAnalysisDraft((s) => ({ ...s, category: v }))} placeholder="产品品类" />
+                  <label>风格</label>
+                  <Input value={analysisDraft.style} onChange={(v) => setAnalysisDraft((s) => ({ ...s, style: v }))} placeholder="产品风格" />
+                  <label>材质</label>
+                  <Input value={analysisDraft.material} onChange={(v) => setAnalysisDraft((s) => ({ ...s, material: v }))} placeholder="材质信息" />
+                  <label>颜色（顿号 / 逗号 / 换行分隔多个）</label>
+                  <TextArea value={analysisDraft.colors} onChange={(v) => setAnalysisDraft((s) => ({ ...s, colors: v }))} autosize={{ minRows: 1, maxRows: 3 }} placeholder="如：黑、银、玫瑰金" />
+                  <label>核心卖点（顿号 / 逗号 / 换行分隔多个）</label>
+                  <TextArea value={analysisDraft.sellingPoints} onChange={(v) => setAnalysisDraft((s) => ({ ...s, sellingPoints: v }))} autosize={{ minRows: 2, maxRows: 5 }} placeholder="如：防水、夜光、蓝宝石镜面" />
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <Button theme="solid" type="primary" size="small" loading={savingAnalysis} onClick={saveAnalysis}>保存</Button>
+                    <Button theme="borderless" size="small" onClick={() => { setEditingAnalysis(false); setAnalysisDraft(null); }}>取消</Button>
+                  </div>
                 </div>
+              ) : analysis ? (
+                <div className="wb-analysis-body">
+                  {analysis.category && <span><b>品类：</b>{analysis.category}</span>}
+                  {analysis.style && <span><b>风格：</b>{analysis.style}</span>}
+                  {analysis.material && <span><b>材质：</b>{analysis.material}</span>}
+                  {Array.isArray(analysis.colors) && analysis.colors.length > 0 && (
+                    <span><b>颜色：</b>{analysis.colors.join("、")}</span>
+                  )}
+                  {Array.isArray(analysis.sellingPoints) && analysis.sellingPoints.length > 0 && (
+                    <span><b>卖点：</b>{analysis.sellingPoints.join("、")}</span>
+                  )}
+                </div>
+              ) : (
+                <Text type="tertiary" size="small">
+                  {sourceAssets.length ? "点「分析产品」让视觉模型提炼品类、材质、卖点，会参与生图提示词。" : "先上传产品图，再分析。"}
+                </Text>
               )}
             </div>
-
-            {editingAnalysis ? (
-              <div className="wb-analysis-edit">
-                <label>品类</label>
-                <Input value={analysisDraft.category} onChange={(v) => setAnalysisDraft((s) => ({ ...s, category: v }))} placeholder="产品品类" />
-                <label>风格</label>
-                <Input value={analysisDraft.style} onChange={(v) => setAnalysisDraft((s) => ({ ...s, style: v }))} placeholder="产品风格" />
-                <label>材质</label>
-                <Input value={analysisDraft.material} onChange={(v) => setAnalysisDraft((s) => ({ ...s, material: v }))} placeholder="材质信息" />
-                <label>颜色（顿号 / 逗号 / 换行分隔多个）</label>
-                <TextArea value={analysisDraft.colors} onChange={(v) => setAnalysisDraft((s) => ({ ...s, colors: v }))} autosize={{ minRows: 1, maxRows: 3 }} placeholder="如：黑、银、玫瑰金" />
-                <label>核心卖点（顿号 / 逗号 / 换行分隔多个）</label>
-                <TextArea value={analysisDraft.sellingPoints} onChange={(v) => setAnalysisDraft((s) => ({ ...s, sellingPoints: v }))} autosize={{ minRows: 2, maxRows: 5 }} placeholder="如：防水、夜光、蓝宝石镜面" />
-                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  <Button theme="solid" type="primary" size="small" loading={savingAnalysis} onClick={saveAnalysis}>保存</Button>
-                  <Button theme="borderless" size="small" onClick={() => { setEditingAnalysis(false); setAnalysisDraft(null); }}>取消</Button>
-                </div>
-              </div>
-            ) : analysis ? (
-              <div className="wb-analysis-body">
-                {analysis.category && <span><b>品类：</b>{analysis.category}</span>}
-                {analysis.style && <span><b>风格：</b>{analysis.style}</span>}
-                {analysis.material && <span><b>材质：</b>{analysis.material}</span>}
-                {Array.isArray(analysis.colors) && analysis.colors.length > 0 && (
-                  <span><b>颜色：</b>{analysis.colors.join("、")}</span>
-                )}
-                {Array.isArray(analysis.sellingPoints) && analysis.sellingPoints.length > 0 && (
-                  <span><b>卖点：</b>{analysis.sellingPoints.join("、")}</span>
-                )}
-              </div>
-            ) : (
-              <Text type="tertiary" size="small">
-                {sourceAssets.length ? "点「分析产品」让视觉模型提炼品类、材质、卖点，会参与生图提示词。" : "先上传产品图，再分析。"}
-              </Text>
-            )}
-          </div>
+          )}
         </div>
       </Card>
 
@@ -466,6 +544,7 @@ export default function SkuWorkbench() {
                 onClick={() => setActiveNode(n.key)}
               >
                 <span className="wb-nav-label">
+                  {isMirror && n.referenceUrl && <img src={n.referenceUrl} className="wb-nav-thumb" alt="" />}
                   {n.isMain && <IconStar size="small" style={{ color: "var(--semi-color-warning)" }} />}
                   {n.label}
                 </span>
@@ -495,9 +574,10 @@ export default function SkuWorkbench() {
               phrases={phrases}
               retry={retry[node.key] || { hint: "", files: [] }}
               setRetry={(patch) => setRetry((s) => ({ ...s, [node.key]: { ...(s[node.key] || { hint: "", files: [] }), ...patch } }))}
+              isMirror={isMirror}
             />
           ) : (
-            <Empty description="该模板还没有节点，去模板设置里添加。" />
+            <Empty description={isMirror ? "该镜像模板还没有参考图，去模板设置里添加。" : "该模板还没有节点，去模板设置里添加。"} />
           )}
         </div>
       </div>
@@ -534,7 +614,7 @@ function NodeStatusIcon({ kind }) {
   return <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1px dashed var(--semi-color-border)" }} />;
 }
 
-function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onDeleteCandidate, onPreview, phrases, retry, setRetry }) {
+function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspect, onGenerate, onSelect, onDeleteCandidate, onPreview, phrases, retry, setRetry, isMirror }) {
   const [dragOver, setDragOver] = useState(false);
   const selected = candidates.find((c) => c.selected);
   const locked = state.kind === "locked";
@@ -586,9 +666,16 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
             {node.usesSelectedMain && <Tag size="small" color="blue">依赖主图</Tag>}
           </span>
           <span className="wb-node-ops">
-            <Tooltip content="该节点图片比例">
-              <Select value={node.aspect} onChange={onAspect} optionList={ASPECT_OPTIONS} size="small" style={{ width: 92 }} />
-            </Tooltip>
+            {!isMirror && (
+              <Tooltip content="该节点图片比例">
+                <Select value={node.aspect || node.defaultAspect || "1:1"} onChange={onAspect} optionList={ASPECT_OPTIONS} size="small" style={{ width: 120 }} />
+              </Tooltip>
+            )}
+            {isMirror && (
+              <Tooltip content="镜像节点比例来自模板参考图，可到模板设置的「镜像参考图」里修改">
+                <Tag color="violet">{node.defaultAspect || "1:1"}</Tag>
+              </Tooltip>
+            )}
             <Tooltip content="本次每个节点生成的候选张数（SKU 级）">
               <InputNumber min={1} max={8} value={count} onChange={onCountChange} style={{ width: 110 }} suffix="张" />
             </Tooltip>
@@ -607,14 +694,24 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
         </div>
       )}
 
-      {selected && (
-        <div className="wb-selected" style={{ marginBottom: 16 }}>
-          <Text strong style={{ display: "block", marginBottom: 8 }}>
-            <IconTick style={{ color: "var(--semi-color-success)" }} /> 已选定最终图
-          </Text>
-          <img src={selected.url} className="wb-selected-img" alt="" onClick={() => onPreview(selected.url)} />
+      {(isMirror && node.referenceUrl) || selected ? (
+        <div className={"wb-compare" + (!selected ? " single" : "")}>
+          {isMirror && node.referenceUrl && (
+            <div className="wb-reference">
+              <Text strong style={{ display: "block", marginBottom: 8 }}>模板参考图</Text>
+              <img src={node.referenceUrl} className="wb-reference-img" alt="" onClick={() => onPreview(node.referenceUrl)} />
+            </div>
+          )}
+          {selected && (
+            <div className="wb-selected">
+              <Text strong style={{ display: "block", marginBottom: 8 }}>
+                <IconTick style={{ color: "var(--semi-color-success)" }} /> 已选定最终图
+              </Text>
+              <img src={selected.url} className="wb-selected-img" alt="" onClick={() => onPreview(selected.url)} />
+            </div>
+          )}
         </div>
-      )}
+      ) : null}
 
       {/* 重跑与提示词放在候选图之前：候选图可能很多，避免每次往下滚 */}
       {/* 重跑：修正提示词 + 临时参考图（粘贴 / 拖拽） */}

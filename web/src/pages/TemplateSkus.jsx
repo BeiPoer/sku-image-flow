@@ -49,6 +49,7 @@ export default function TemplateSkus() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState("");
   const formApi = useRef(null);
+  const isMirror = template?.kind === "mirror";
 
   async function load() {
     setLoading(true);
@@ -109,7 +110,7 @@ export default function TemplateSkus() {
     <div className="page">
       <AppHeader
         title={template ? template.name : "模板"}
-        subtitle="SKU 列表 · 主图与详情图生成台"
+        subtitle={isMirror ? "SKU 列表 · 镜像复刻图生成台" : "SKU 列表 · 主图与详情图生成台"}
         backTo="/"
         right={
           <Button
@@ -125,9 +126,12 @@ export default function TemplateSkus() {
       <div className="hero">
         <Title heading={3} style={{ margin: 0 }}>{template ? template.name : "加载中…"}</Title>
         <Paragraph type="tertiary" style={{ marginTop: 6 }}>
-          {template?.description || "这套模板的 SKU 都复用同一组详情图节点流程。"}
+          {template?.description || (isMirror ? "这套镜像模板的 SKU 会复用同一组参考图节点。" : "这套模板的 SKU 都复用同一组详情图节点流程。")}
         </Paragraph>
-        <Tag color="grey" style={{ marginTop: 8 }}>{nodeCount} 个节点</Tag>
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <Tag color={isMirror ? "violet" : "grey"}>{isMirror ? "镜像模板" : "普通模板"}</Tag>
+          <Tag color="grey">{nodeCount} 个{isMirror ? "镜像节点" : "节点"}</Tag>
+        </div>
       </div>
 
       <Card className="panel" title={<span className="panel-title"><IconPlus /> 新建 SKU</span>}>
@@ -143,8 +147,8 @@ export default function TemplateSkus() {
           />
           <Form.TextArea
             field="notes"
-            label="补充备注"
-            placeholder="产品的零散信息，会参与生图提示词拼接，可留空"
+            label={isMirror ? "SKU 全局提示词" : "补充备注"}
+            placeholder={isMirror ? "会参与该 SKU 下所有镜像节点生成，可留空" : "产品的零散信息，会参与生图提示词拼接，可留空"}
             autosize={{ minRows: 2, maxRows: 4 }}
           />
           <Button
