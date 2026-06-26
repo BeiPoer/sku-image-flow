@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
+  Collapsible,
   Empty,
   Form,
   RadioGroup,
@@ -20,11 +21,14 @@ import {
   IconDelete,
   IconCopy,
   IconChevronRight,
+  IconChevronDown,
   IconLayers,
   IconImage,
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
 import AppHeader from "../components/AppHeader.jsx";
+import Dashboard from "../components/Dashboard.jsx";
+import SystemSettingsModal from "../components/SystemSettingsModal.jsx";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -38,6 +42,9 @@ export default function TemplatesHome() {
   const [createKind, setCreateKind] = useState("normal");
   const [mirrorFiles, setMirrorFiles] = useState([]);
   const [mirrorDragOver, setMirrorDragOver] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dashRefresh, setDashRefresh] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
   const formApi = useRef(null);
   const mirrorInputRef = useRef(null);
   const mirrorFilesRef = useRef([]);
@@ -164,6 +171,23 @@ export default function TemplatesHome() {
       <AppHeader
         title="电商图片工作流"
         subtitle="模板 · SKU 主图与详情图生成台"
+        right={
+          <Button
+            icon={<IconSetting />}
+            theme="borderless"
+            onClick={() => setSettingsOpen(true)}
+          >
+            系统设置
+          </Button>
+        }
+      />
+
+      <Dashboard refreshKey={dashRefresh} />
+
+      <SystemSettingsModal
+        visible={settingsOpen}
+        onCancel={() => setSettingsOpen(false)}
+        onSaved={() => setDashRefresh((k) => k + 1)}
       />
 
       <div className="hero">
@@ -173,7 +197,28 @@ export default function TemplatesHome() {
         </Paragraph>
       </div>
 
-      <Card className="panel" title={<span className="panel-title"><IconPlus /> 新建模板</span>}>
+      <Card
+        className="panel create-card"
+        title={
+          <div
+            className="panel-title"
+            style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", width: "100%" }}
+            onClick={() => setCreateOpen((v) => !v)}
+          >
+            <IconPlus /> 新建模板
+            <span style={{ flex: 1 }} />
+            <Button
+              icon={createOpen ? <IconChevronDown /> : <IconChevronRight />}
+              theme="borderless"
+              onClick={(e) => { e.stopPropagation(); setCreateOpen((v) => !v); }}
+              aria-label={createOpen ? "收起" : "展开"}
+            >
+              {createOpen ? "收起" : "展开"}
+            </Button>
+          </div>
+        }
+      >
+        <Collapsible isOpen={createOpen} keepDOM>
         <Form
           getFormApi={(a) => (formApi.current = a)}
           onSubmit={handleCreate}
@@ -238,6 +283,7 @@ export default function TemplatesHome() {
             {createKind === "mirror" ? "创建镜像模板" : "创建普通模板"}
           </Button>
         </Form>
+        </Collapsible>
       </Card>
 
       <Card

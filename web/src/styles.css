@@ -757,3 +757,116 @@ body {
   width: 6px;
   height: 12px;
 }
+
+/* ---------------- 仪表盘 ---------------- */
+.dashboard {
+  margin: 16px 0 8px;
+}
+
+/* 统计卡区 */
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+@media (max-width: 720px) {
+  .dash-stats {
+    grid-template-columns: 1fr;
+  }
+}
+.dash-stat .semi-card-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.dash-stat {
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.dash-stat:hover {
+  box-shadow: var(--semi-shadow-elevated);
+  transform: translateY(-2px);
+}
+.dash-stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border-radius: var(--semi-border-radius-large);
+}
+.dash-stat-icon.tone-primary {
+  background: var(--semi-color-primary-light-default);
+  color: var(--semi-color-primary);
+}
+.dash-stat-icon.tone-success {
+  background: var(--semi-color-success-light-default);
+  color: var(--semi-color-success);
+}
+.dash-stat-icon.tone-tertiary {
+  background: var(--semi-color-fill-0);
+  color: var(--semi-color-text-2);
+}
+.dash-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dash-stat-num {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1.1;
+}
+.dash-stat-count {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--semi-color-text-0);
+  font-variant-numeric: tabular-nums;
+}
+.dash-stat-unit {
+  font-size: 13px;
+  color: var(--semi-color-text-2);
+}
+
+/* 趋势卡 */
+.dash-trend-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.dash-chart {
+  width: 100%;
+}
+.dash-chart svg {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+.dash-bar {
+  fill: var(--semi-color-primary);
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+  cursor: pointer;
+}
+.dash-bar:hover {
+  opacity: 1;
+}
+.dash-bar-label {
+  fill: var(--semi-color-text-2);
+  font-size: 10px;
+}
+
+/* 新建模板卡：让标题区占满整行，整行可点击展开/收起 */
+.create-card .semi-card-header-wrapper,
+.create-card .semi-card-header-main,
+.create-card .semi-card-header-title {
+  flex: 1 1 auto;
+  width: 100%;
+}
+

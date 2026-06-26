@@ -46,7 +46,17 @@ const config = {
   openaiBaseUrl: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, ""),
   imageModel: process.env.IMAGE_MODEL || "gpt-image-2",
   visionTextModel: process.env.VISION_TEXT_MODEL || "gpt-5-mini",
-  defaultCandidates: Number.parseInt(process.env.DEFAULT_CANDIDATES || "4", 10) || 4
+  defaultCandidates: Number.parseInt(process.env.DEFAULT_CANDIDATES || "4", 10) || 4,
+  unitPrice: Number.parseFloat(process.env.UNIT_PRICE || "0") || 0
+};
+// 系统设置以数据库（app_config）为准，覆盖上面的 .env 默认值；键名见下。
+const CONFIG_KEYS = {
+  openaiApiKey: "openai_api_key",
+  openaiBaseUrl: "openai_base_url",
+  imageModel: "image_model",
+  visionTextModel: "vision_text_model",
+  defaultCandidates: "default_candidates",
+  unitPrice: "unit_price"
 };
 
 // 图片比例 → 接口尺寸
@@ -116,12 +126,29 @@ function toConsistencyText(value) {
 
 await ensureDirs();
 const db = initDb();
+applyConfigFromDb();
 migrateTemplates();
 
 function ensureApiConfig() {
   if (!config.openaiApiKey) {
-    throw new Error("缺少 OPENAI_API_KEY，请先配置 .env.local 或环境变量。");
+    throw new Error("尚未配置 API Key，请点击首页右上角「系统设置」填写 API URL 与 Key。");
   }
+}
+
+// 启动时把 app_config 里已保存的系统设置覆盖进内存 config（数据库优先于 .env）
+function applyConfigFromDb() {
+  const apiKey = getConfig(CONFIG_KEYS.openaiApiKey);
+  if (apiKey != null) config.openaiApiKey = apiKey;
+  const baseUrl = getConfig(CONFIG_KEYS.openaiBaseUrl);
+  if (baseUrl != null && baseUrl.trim()) config.openaiBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+  const imageModel = getConfig(CONFIG_KEYS.imageModel);
+  if (imageModel != null && imageModel.trim()) config.imageModel = imageModel.trim();
+  const visionModel = getConfig(CONFIG_KEYS.visionTextModel);
+  if (visionModel != null && visionModel.trim()) config.visionTextModel = visionModel.trim();
+  const candidates = Number.parseInt(getConfig(CONFIG_KEYS.defaultCandidates), 10);
+  if (Number.isFinite(candidates) && candidates > 0) config.defaultCandidates = candidates;
+  const unitPrice = Number.parseFloat(getConfig(CONFIG_KEYS.unitPrice));
+  if (Number.isFinite(unitPrice) && unitPrice >= 0) config.unitPrice = unitPrice;
 }
 
 async function ensureDirs() {
@@ -241,6 +268,7 @@ function initDb() {
   ensureColumn(database, "sku", "template_id", "template_id TEXT");
   ensureColumn(database, "template", "kind", "kind TEXT NOT NULL DEFAULT 'normal'");
   ensureColumn(database, "template", "phrases", "phrases TEXT");
+  ensureColumn(database, "candidate_image", "unit_price", "unit_price REAL");
   return database;
 }
 
@@ -433,6 +461,59 @@ function getConfigPayload() {
   };
 }
 
+// 仪表盘统计：基于 candidate_image（每条 = 一张已生成图）。
+// 花费按生成时快照的 unit_price 统计，旧图（NULL）计 0。日期按本地时区聚合。
+function buildDashboard(fromParam, toParam) {
+  const summarize = (whereSql, ...args) => {
+    const r = row(
+      `SELECT COUNT(*) AS count, COALESCE(SUM(COALESCE(unit_price, 0)), 0) AS cost FROM candidate_image ${whereSql}`,
+      ...args
+    );
+    return { count: r?.count || 0, cost: Number(r?.cost || 0) };
+  };
+
+  const today = summarize("WHERE date(created_at, 'localtime') = date('now', 'localtime')");
+  const last7 = summarize("WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-6 days')");
+  const total = summarize("");
+
+  // 趋势区间：默认近 14 天（含今天）。from/to 接受 YYYY-MM-DD。
+  const isDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  let to = isDate(toParam) ? toParam : todayLocalDate();
+  let from = isDate(fromParam) ? fromParam : addLocalDays(to, -13);
+  if (from > to) [from, to] = [to, from];
+
+  const trendRows = rows(
+    `SELECT date(created_at, 'localtime') AS day, COUNT(*) AS count, COALESCE(SUM(COALESCE(unit_price, 0)), 0) AS cost
+     FROM candidate_image
+     WHERE date(created_at, 'localtime') BETWEEN ? AND ?
+     GROUP BY day`,
+    from,
+    to
+  );
+  const byDay = new Map(trendRows.map((r) => [r.day, { count: r.count, cost: Number(r.cost || 0) }]));
+  const trend = [];
+  for (let d = from; d <= to; d = addLocalDays(d, 1)) {
+    const hit = byDay.get(d);
+    trend.push({ date: d, count: hit?.count || 0, cost: hit?.cost || 0 });
+    if (trend.length > 366) break; // 安全上限，避免异常区间撑爆
+  }
+
+  return { today, last7, total, trend, unitPrice: config.unitPrice, from, to };
+}
+
+// 本地时区今天的 YYYY-MM-DD
+function todayLocalDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// 在 YYYY-MM-DD 上加减天数，返回 YYYY-MM-DD（按本地日历）
+function addLocalDays(date, delta) {
+  const [y, m, d] = date.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + delta);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
 function createSku({ name, notes, templateId }) {
   const id = randomUUID();
   const ts = now();
@@ -496,11 +577,11 @@ function updateTask(id, { status, error = null }) {
   db.prepare("UPDATE generation_task SET status = ?, error = ?, updated_at = ? WHERE id = ?").run(status, error, now(), id);
 }
 
-function createCandidate({ skuId, taskId, nodeKey, filePath, prompt }) {
+function createCandidate({ skuId, taskId, nodeKey, filePath, prompt, unitPrice = null }) {
   const id = randomUUID();
-  db.prepare(`INSERT INTO candidate_image (id, sku_id, task_id, node_key, file_path, selected, prompt, created_at)
-    VALUES (?, ?, ?, ?, ?, 0, ?, ?)`)
-    .run(id, skuId, taskId, nodeKey, filePath, prompt, now());
+  db.prepare(`INSERT INTO candidate_image (id, sku_id, task_id, node_key, file_path, selected, prompt, unit_price, created_at)
+    VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)`)
+    .run(id, skuId, taskId, nodeKey, filePath, prompt, unitPrice, now());
   return row("SELECT * FROM candidate_image WHERE id = ?", id);
 }
 
@@ -1108,6 +1189,77 @@ async function saveGeneratedImage({ skuId, nodeKey, b64, mimeType, index }) {
 }
 
 async function handleApi(req, res, url) {
+  // ---------------- 系统设置 ----------------
+  if (url.pathname === "/api/config") {
+    if (req.method === "GET") {
+      const key = config.openaiApiKey || "";
+      return sendJson(res, 200, {
+        config: {
+          openaiBaseUrl: config.openaiBaseUrl,
+          imageModel: config.imageModel,
+          visionTextModel: config.visionTextModel,
+          defaultCandidates: config.defaultCandidates,
+          unitPrice: config.unitPrice,
+          hasApiKey: Boolean(key),
+          apiKeyTail: key ? key.slice(-4) : ""
+        }
+      });
+    }
+    if (req.method === "PUT") {
+      const body = await readJson(req);
+      if (typeof body.openaiBaseUrl === "string" && body.openaiBaseUrl.trim()) {
+        const normalized = body.openaiBaseUrl.trim().replace(/\/+$/, "");
+        setConfig(CONFIG_KEYS.openaiBaseUrl, normalized);
+        config.openaiBaseUrl = normalized;
+      }
+      // 空字符串表示不修改既有 Key；非空才覆盖
+      if (typeof body.openaiApiKey === "string" && body.openaiApiKey.trim()) {
+        const apiKey = body.openaiApiKey.trim();
+        setConfig(CONFIG_KEYS.openaiApiKey, apiKey);
+        config.openaiApiKey = apiKey;
+      }
+      if (typeof body.imageModel === "string" && body.imageModel.trim()) {
+        setConfig(CONFIG_KEYS.imageModel, body.imageModel.trim());
+        config.imageModel = body.imageModel.trim();
+      }
+      if (typeof body.visionTextModel === "string" && body.visionTextModel.trim()) {
+        setConfig(CONFIG_KEYS.visionTextModel, body.visionTextModel.trim());
+        config.visionTextModel = body.visionTextModel.trim();
+      }
+      if (body.defaultCandidates !== undefined && body.defaultCandidates !== null && body.defaultCandidates !== "") {
+        const n = Number.parseInt(body.defaultCandidates, 10);
+        if (!Number.isFinite(n) || n < 1) return sendJson(res, 400, { error: "默认候选数需为正整数" });
+        setConfig(CONFIG_KEYS.defaultCandidates, String(n));
+        config.defaultCandidates = n;
+      }
+      if (body.unitPrice !== undefined && body.unitPrice !== null && body.unitPrice !== "") {
+        const p = Number.parseFloat(body.unitPrice);
+        if (!Number.isFinite(p) || p < 0) return sendJson(res, 400, { error: "生图单价需为不小于 0 的数字" });
+        setConfig(CONFIG_KEYS.unitPrice, String(p));
+        config.unitPrice = p;
+      }
+      const key = config.openaiApiKey || "";
+      return sendJson(res, 200, {
+        config: {
+          openaiBaseUrl: config.openaiBaseUrl,
+          imageModel: config.imageModel,
+          visionTextModel: config.visionTextModel,
+          defaultCandidates: config.defaultCandidates,
+          unitPrice: config.unitPrice,
+          hasApiKey: Boolean(key),
+          apiKeyTail: key ? key.slice(-4) : ""
+        }
+      });
+    }
+    return sendJson(res, 405, { error: "方法不被支持" });
+  }
+
+  // ---------------- 仪表盘统计 ----------------
+  if (url.pathname === "/api/dashboard") {
+    if (req.method !== "GET") return sendJson(res, 405, { error: "方法不被支持" });
+    return sendJson(res, 200, buildDashboard(url.searchParams.get("from"), url.searchParams.get("to")));
+  }
+
   // ---------------- 模板 ----------------
   if (url.pathname === "/api/templates") {
     if (req.method === "GET") {
@@ -1574,7 +1726,7 @@ async function handleApi(req, res, url) {
       const candidates = [];
       for (const [index, result] of results.entries()) {
         const filePath = await saveGeneratedImage({ skuId, nodeKey: node.key, b64: result.b64, mimeType: result.mimeType, index });
-        candidates.push(createCandidate({ skuId, taskId: task.id, nodeKey: node.key, filePath, prompt }));
+        candidates.push(createCandidate({ skuId, taskId: task.id, nodeKey: node.key, filePath, prompt, unitPrice: config.unitPrice }));
       }
       updateTask(task.id, { status: "completed" });
       updateSku(skuId, { status: node.isMain ? "main_generated" : "details_generated" });
