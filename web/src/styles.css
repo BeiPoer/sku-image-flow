@@ -312,6 +312,11 @@ body {
   gap: 10px;
   align-content: flex-start;
 }
+.wb-thumb-shell {
+  position: relative;
+  width: 92px;
+  height: 92px;
+}
 .wb-thumb {
   width: 92px;
   height: 92px;
@@ -322,6 +327,21 @@ body {
   transition: opacity 0.15s ease;
 }
 .wb-thumb:hover { opacity: 0.85; }
+.wb-thumb-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  opacity: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  transition: opacity 0.15s ease;
+}
+.wb-thumb-shell:hover .wb-thumb-delete,
+.wb-thumb-delete:focus-visible {
+  opacity: 1;
+}
 .wb-upload-trigger {
   width: 92px;
   height: 92px;

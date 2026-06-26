@@ -86,6 +86,7 @@ export default function SkuWorkbench() {
   const [notesDraft, setNotesDraft] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [preview, setPreview] = useState(""); // 放大预览的图片 src，空串=关闭
+  const [deletingAssetId, setDeletingAssetId] = useState("");
   const sourceInputRef = useRef(null);
 
   const load = useCallback(async () => {
@@ -184,6 +185,20 @@ export default function SkuWorkbench() {
       Toast.error(e.message || "上传失败");
     }
     if (sourceInputRef.current) sourceInputRef.current.value = "";
+  }
+
+  async function deleteSourceAsset(asset) {
+    setDeletingAssetId(asset.id);
+    try {
+      await api("/api/skus/" + skuId + "/assets/" + asset.id, { method: "DELETE" });
+      if (preview === asset.url) setPreview("");
+      Toast.success(isMirror ? "商品图已删除" : "产品图已删除");
+      await load();
+    } catch (e) {
+      Toast.error(e.message || "删除失败");
+    } finally {
+      setDeletingAssetId("");
+    }
   }
 
   async function analyze() {
@@ -434,7 +449,27 @@ export default function SkuWorkbench() {
         <div className="wb-product">
           <div className="wb-thumbs">
             {sourceAssets.map((a) => (
-              <img key={a.id} src={a.url} className="wb-thumb" alt="" onClick={() => setPreview(a.url)} />
+              <div key={a.id} className="wb-thumb-shell">
+                <img src={a.url} className="wb-thumb" alt="" onClick={() => setPreview(a.url)} />
+                <Popconfirm
+                  title={isMirror ? "删除商品图" : "删除产品图"}
+                  content={isMirror ? "删除后可以重新上传商品图。" : "删除后可以重新上传产品图。"}
+                  okType="danger"
+                  okText="删除"
+                  cancelText="取消"
+                  onConfirm={() => deleteSourceAsset(a)}
+                >
+                  <Button
+                    icon={<IconDelete />}
+                    className="wb-thumb-delete"
+                    size="small"
+                    loading={deletingAssetId === a.id}
+                    type="danger"
+                    theme="solid"
+                    aria-label={isMirror ? "删除商品图" : "删除产品图"}
+                  />
+                </Popconfirm>
+              </div>
             ))}
             <button className="wb-upload-trigger" onClick={() => sourceInputRef.current?.click()}>
               <IconUpload />

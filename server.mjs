@@ -1448,6 +1448,32 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { assets: saved });
   }
 
+  if (req.method === "DELETE" && action === "assets" && candidateId) {
+    const assetId = candidateId;
+    const asset = row("SELECT * FROM asset WHERE id = ? AND sku_id = ?", assetId, skuId);
+    if (!asset) return sendJson(res, 404, { error: "产品图不存在" });
+    if (asset.source_type !== "upload" || asset.role === "retry") {
+      return sendJson(res, 400, { error: "只能删除上传的产品图" });
+    }
+
+    db.prepare("DELETE FROM asset WHERE id = ? AND sku_id = ?").run(assetId, skuId);
+    if (asset.file_path && isInside(uploadDir, asset.file_path) && existsSync(asset.file_path)) {
+      await rm(asset.file_path, { force: true });
+    }
+
+    const remainingUploads = row(
+      "SELECT COUNT(*) AS n FROM asset WHERE sku_id = ? AND source_type = 'upload' AND role != 'retry'",
+      skuId
+    )?.n || 0;
+    if (remainingUploads === 0) {
+      updateSku(skuId, { analysis_json: null, selected_main_asset_id: null });
+    }
+
+    const nextStatus = recomputeSkuStatus(skuId);
+    updateSku(skuId, { status: nextStatus });
+    return sendJson(res, 200, { ok: true, status: nextStatus });
+  }
+
   if (req.method === "POST" && action === "analyze") {
     const imageAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'upload' ORDER BY created_at ASC", skuId);
     if (!imageAssets.length) return sendJson(res, 400, { error: "请先上传产品图" });
