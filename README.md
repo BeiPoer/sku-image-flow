@@ -82,6 +82,33 @@ npm run web:dev     # http://127.0.0.1:5173
 
 改完后 `npm run build` 重新产出 `dist/`，生产由 `npm start` 直接托管。
 
+## 打包成 Windows exe
+
+如果你要把程序发给别人直接用，可以在 Windows 上执行：
+
+```bash
+npm run build:exe
+```
+
+脚本会先安装根依赖和 `web/` 依赖、构建前端，然后调用 `electron-builder` 生成 portable 版 exe，产物输出到 `release/`。
+
+打包后的程序会自动启动本地服务并打开本地页面。首次运行时，如果同目录没有 `.env.local`，程序会自动在配置目录里生成一个示例文件，你需要在里面填写：
+
+```env
+OPENAI_API_KEY=你的key
+OPENAI_BASE_URL=https://你的代理地址/v1
+IMAGE_MODEL=gpt-image-2
+VISION_TEXT_MODEL=gpt-5-mini
+DEFAULT_CANDIDATES=4
+PORT=3678
+```
+
+其中：
+
+- 用户数据默认保存在系统的用户配置目录
+- `.env.local` 会优先放在 exe 同目录；如果当前目录不可写，会自动回退到用户配置目录
+- 如果你希望发给别人“开箱即用”，还需要把 API Key 和代理地址一并准备好
+
 ## 模板与节点
 
 每个模板拥有自己的一套节点。可以在模板的「节点设置」里增删节点、改名称/顺序/比例/提示词，并标记哪个是主图节点、哪些节点依赖已选主图。

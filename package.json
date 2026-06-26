@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "prestart": "npm --prefix web run build",
     "start": "node --experimental-sqlite server.mjs",
@@ -10,6 +11,39 @@
     "web:install": "npm --prefix web install",
     "web:dev": "npm --prefix web run dev",
     "build": "npm --prefix web run build",
-    "setup": "npm --prefix web install && npm --prefix web run build"
+    "setup": "npm --prefix web install && npm --prefix web run build",
+    "build:exe": "node scripts/build-exe.mjs"
+  },
+  "devDependencies": {
+    "electron": "^42.5.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.skuimageflow.desktop",
+    "productName": "SkuImageFlow",
+    "asar": false,
+    "electronDist": "node_modules/electron/dist",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "server.mjs",
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}-portable.${ext}"
+    }
   }
 }

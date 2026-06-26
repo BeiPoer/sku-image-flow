@@ -9,12 +9,13 @@ import { TextDecoder } from "node:util";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = __dirname;
-const dataDir = path.join(rootDir, "data");
+const dataDir = path.resolve(process.env.SKU_IMAGE_FLOW_DATA_DIR || path.join(rootDir, "data"));
 const uploadDir = path.join(dataDir, "uploads");
 const templateUploadDir = path.join(dataDir, "template_uploads");
 const generatedDir = path.join(dataDir, "generated");
 const dbPath = path.join(dataDir, "app.db");
-const distDir = path.join(rootDir, "dist");
+const distDir = path.resolve(process.env.SKU_IMAGE_FLOW_DIST_DIR || path.join(rootDir, "dist"));
+const envDir = path.resolve(process.env.SKU_IMAGE_FLOW_ENV_DIR || rootDir);
 const STATIC_MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -36,6 +37,8 @@ const STATIC_MIME = {
 
 await loadEnvFile(path.join(rootDir, ".env"));
 await loadEnvFile(path.join(rootDir, ".env.local"));
+await loadEnvFile(path.join(envDir, ".env"));
+await loadEnvFile(path.join(envDir, ".env.local"));
 
 const config = {
   port: Number.parseInt(process.env.PORT || "3678", 10),
@@ -1743,5 +1746,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(config.port, () => {
-  console.log(`电商图片工作流已启动：http://127.0.0.1:${config.port}`);
+  const address = server.address();
+  const port = typeof address === "object" && address && "port" in address ? address.port : config.port;
+  console.log(`电商图片工作流已启动：http://127.0.0.1:${port}`);
 });
