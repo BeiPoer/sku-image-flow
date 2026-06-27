@@ -289,7 +289,9 @@ body {
   border: 1px solid var(--semi-color-border);
   object-fit: cover;
   flex: 0 0 auto;
+  cursor: zoom-in;
 }
+.mirror-image-preview:hover { border-color: var(--semi-color-primary); }
 .mirror-image-info {
   min-width: 0;
   flex: 1;
@@ -869,4 +871,3 @@ body {
   flex: 1 1 auto;
   width: 100%;
 }
-

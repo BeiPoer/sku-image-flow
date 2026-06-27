@@ -101,6 +101,28 @@ function parsePhrases(raw) {
   }
 }
 
+// 镜像参考图放大预览层：全屏遮罩 + 居中大图，点遮罩或按 Esc 关闭。
+function Lightbox({ src, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [onClose]);
+
+  return (
+    <div className="wb-lightbox" onClick={onClose}>
+      <img src={src} alt="" onClick={(e) => e.stopPropagation()} />
+      <button className="wb-lightbox-close" onClick={onClose} aria-label="关闭">×</button>
+    </div>
+  );
+}
+
 export default function TemplateSettings() {
   const { templateId } = useParams();
   const navigate = useNavigate();
@@ -117,6 +139,7 @@ export default function TemplateSettings() {
   const [savingImages, setSavingImages] = useState(false);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
+  const [preview, setPreview] = useState("");
   const imageInputRef = useRef(null);
 
   async function load() {
@@ -249,6 +272,8 @@ export default function TemplateSettings() {
       Toast.warning("镜像模板至少保留 1 张参考图");
       return;
     }
+    const removed = templateImages.find((item) => item.id === id);
+    if (removed && removed.url === preview) setPreview("");
     setTemplateImages((prev) => prev.filter((item) => item.id !== id));
   }
 
@@ -470,7 +495,21 @@ export default function TemplateSettings() {
             {templateImages.map((img, i) => (
               <div className="mirror-image-row" key={img.id}>
                 <div className="node-order">{i + 1}</div>
-                <img src={img.url} alt="" className="mirror-image-preview" />
+                <img
+                  src={img.url}
+                  alt={img.original_name || "参考图"}
+                  className="mirror-image-preview"
+                  title="点击预览"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setPreview(img.url)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setPreview(img.url);
+                    }
+                  }}
+                />
                 <div className="mirror-image-info">
                   <Text strong>镜像图 {String(i + 1).padStart(2, "0")}</Text>
                   <Text type="tertiary" size="small">{img.original_name || "参考图"}</Text>
@@ -576,6 +615,7 @@ export default function TemplateSettings() {
           </div>
         </Card>
       )}
+      {preview ? <Lightbox src={preview} onClose={() => setPreview("")} /> : null}
     </div>
   );
 }
