@@ -28,8 +28,15 @@ import AppHeader from "../components/AppHeader.jsx";
 
 const { Title, Paragraph, Text } = Typography;
 
+const MAX_CANDIDATE_COUNT = 4;
 const ASPECT_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"].map((v) => ({ value: v, label: v }));
 const MIRROR_ASPECT_OPTIONS = ["1:1", "3:4", "4:3", "16:9", "9:16"].map((v) => ({ value: v, label: aspectLabel(v) }));
+
+function clampCandidateCount(value) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.max(1, Math.min(MAX_CANDIDATE_COUNT, parsed));
+}
 
 function aspectLabel(value) {
   const cls = "aspect-graphic " + aspectClass(value);
@@ -152,7 +159,7 @@ export default function TemplateSettings() {
         name: t.name || "",
         description: t.description || "",
         consistency_rules: json.consistencyText || "",
-        default_candidate_count: t.default_candidate_count ?? "",
+        default_candidate_count: t.default_candidate_count == null ? "" : clampCandidateCount(t.default_candidate_count),
       });
       setPhrases(parsePhrases(t.phrases));
       setNodes((json.nodes || []).map(fromServer));
@@ -176,7 +183,7 @@ export default function TemplateSettings() {
       const payload = {
         name: info.name,
         description: info.description,
-        default_candidate_count: countRaw === "" ? null : Number(countRaw),
+        default_candidate_count: countRaw === "" ? null : clampCandidateCount(countRaw),
       };
       if (templateKind !== "mirror") payload.consistency_rules = info.consistency_rules;
       await api("/api/templates/" + encodeURIComponent(templateId), {
@@ -403,9 +410,11 @@ export default function TemplateSettings() {
           <Form.Slot label="默认候选张数（每个节点每次生成的候选图数量，留空用全局默认）">
             <Input
               type="number"
+              min={1}
+              max={MAX_CANDIDATE_COUNT}
               value={info.default_candidate_count}
               onChange={(v) => setInfo((s) => ({ ...s, default_candidate_count: v }))}
-              placeholder="1 ~ 8"
+              placeholder={`1 ~ ${MAX_CANDIDATE_COUNT}`}
               style={{ maxWidth: 160 }}
             />
           </Form.Slot>

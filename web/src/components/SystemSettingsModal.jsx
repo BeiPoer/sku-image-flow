@@ -3,6 +3,15 @@ import { Modal, Form, Banner, Typography, Toast } from "@douyinfe/semi-ui";
 import { api } from "../api.js";
 
 const { Text } = Typography;
+const MAX_CANDIDATE_COUNT = 4;
+
+function clampCandidateCount(value, fallback = MAX_CANDIDATE_COUNT) {
+  const parsed = Number.parseInt(String(value), 10);
+  const fallbackParsed = Number.parseInt(String(fallback), 10);
+  const base = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackParsed;
+  if (!Number.isFinite(base) || base < 1) return 1;
+  return Math.max(1, Math.min(MAX_CANDIDATE_COUNT, base));
+}
 
 // 系统设置弹窗：配置生图 API（URL / Key）、图像模型、默认候选数与生图单价。
 // 配置保存在后端 app_config 表，运行时覆盖 .env。
@@ -25,7 +34,7 @@ export default function SystemSettingsModal({ visible, onCancel, onSaved }) {
           openaiBaseUrl: c.openaiBaseUrl || "",
           openaiApiKey: "",
           imageModel: c.imageModel || "",
-          defaultCandidates: c.defaultCandidates ?? 4,
+          defaultCandidates: clampCandidateCount(c.defaultCandidates),
           unitPrice: c.unitPrice ?? 0,
         });
       })
@@ -112,7 +121,7 @@ export default function SystemSettingsModal({ visible, onCancel, onSaved }) {
           field="defaultCandidates"
           label="默认候选数"
           min={1}
-          max={10}
+          max={MAX_CANDIDATE_COUNT}
           step={1}
           precision={0}
           style={{ width: "100%" }}

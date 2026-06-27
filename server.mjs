@@ -40,12 +40,13 @@ await loadEnvFile(path.join(rootDir, ".env.local"));
 await loadEnvFile(path.join(envDir, ".env"));
 await loadEnvFile(path.join(envDir, ".env.local"));
 
+const MAX_CANDIDATE_COUNT = 4;
 const config = {
   port: Number.parseInt(process.env.PORT || "3678", 10),
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   openaiBaseUrl: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, ""),
   imageModel: process.env.IMAGE_MODEL || "gpt-image-2",
-  defaultCandidates: Number.parseInt(process.env.DEFAULT_CANDIDATES || "3", 10) || 3,
+  defaultCandidates: normalizeCandidateCount(process.env.DEFAULT_CANDIDATES || "3", 3),
   unitPrice: Number.parseFloat(process.env.UNIT_PRICE || "0") || 0
 };
 // 系统设置以数据库（app_config）为准，覆盖上面的 .env 默认值；键名见下。
@@ -151,7 +152,7 @@ function applyConfigFromDb() {
   const imageModel = getConfig(CONFIG_KEYS.imageModel);
   if (imageModel != null && imageModel.trim()) config.imageModel = imageModel.trim();
   const candidates = Number.parseInt(getConfig(CONFIG_KEYS.defaultCandidates), 10);
-  if (Number.isFinite(candidates) && candidates > 0) config.defaultCandidates = candidates;
+  if (Number.isFinite(candidates) && candidates > 0) config.defaultCandidates = normalizeCandidateCount(candidates);
   const unitPrice = Number.parseFloat(getConfig(CONFIG_KEYS.unitPrice));
   if (Number.isFinite(unitPrice) && unitPrice >= 0) config.unitPrice = unitPrice;
 }
@@ -738,11 +739,14 @@ function createTemplate({ name, description, consistencyRules, defaultCandidateC
   const id = randomUUID();
   const ts = now();
   const safeKind = kind === "mirror" ? "mirror" : "normal";
+  const safeDefaultCandidateCount = defaultCandidateCount == null || defaultCandidateCount === ""
+    ? null
+    : normalizeCandidateCount(defaultCandidateCount);
   db.prepare(`INSERT INTO template (id, name, kind, description, consistency_rules, default_candidate_count, phrases, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, name, safeKind, description || null,
       (() => { const t = toConsistencyText(consistencyRules).trim(); return t || null; })(),
-      defaultCandidateCount ?? null,
+      safeDefaultCandidateCount,
       (() => {
         if (!Array.isArray(phrases)) return null;
         const list = phrases.map((p) => String(p == null ? "" : p).trim()).filter(Boolean).map((p) => p.slice(0, 100)).slice(0, 50);
@@ -865,7 +869,10 @@ function parseAspects(raw) {
 
 function normalizeCandidateCount(value, fallback = config.defaultCandidates) {
   const parsed = Number.parseInt(String(value), 10);
-  return Math.max(1, Math.min(8, Number.isFinite(parsed) && parsed > 0 ? parsed : fallback));
+  const fallbackParsed = Number.parseInt(String(fallback), 10);
+  const base = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackParsed;
+  if (!Number.isFinite(base) || base < 1) return 1;
+  return Math.max(1, Math.min(MAX_CANDIDATE_COUNT, base));
 }
 
 function effectiveCandidateCount({ requested, sku, template }) {
@@ -1160,9 +1167,9 @@ async function handleApi(req, res, url) {
       }
       if (body.defaultCandidates !== undefined && body.defaultCandidates !== null && body.defaultCandidates !== "") {
         const n = Number.parseInt(body.defaultCandidates, 10);
-        if (!Number.isFinite(n) || n < 1) return sendJson(res, 400, { error: "默认候选数需为正整数" });
+        if (!Number.isFinite(n) || n < 1 || n > MAX_CANDIDATE_COUNT) return sendJson(res, 400, { error: `默认候选数需为 1-${MAX_CANDIDATE_COUNT} 的整数` });
         setConfig(CONFIG_KEYS.defaultCandidates, String(n));
-        config.defaultCandidates = n;
+        config.defaultCandidates = normalizeCandidateCount(n);
       }
       if (body.unitPrice !== undefined && body.unitPrice !== null && body.unitPrice !== "") {
         const p = Number.parseFloat(body.unitPrice);
@@ -1296,7 +1303,10 @@ async function handleApi(req, res, url) {
     if (!sub && req.method === "GET") {
       const nodes = templateNodeList(template);
       return sendJson(res, 200, {
-        template,
+        template: {
+          ...template,
+          default_candidate_count: template.default_candidate_count == null ? null : normalizeCandidateCount(template.default_candidate_count)
+        },
         consistencyText: templateConsistencyText(template),
         defaultConsistencyText: DEFAULT_CONSISTENCY_TEXT,
         nodes,
@@ -1501,10 +1511,16 @@ async function handleApi(req, res, url) {
           : buildImageSegments({ node, sku, template, retryHint: "" })
       };
     });
-    const defaultCount = (template && template.default_candidate_count) || config.defaultCandidates;
+    const defaultCount = normalizeCandidateCount((template && template.default_candidate_count) || config.defaultCandidates);
     return sendJson(res, 200, {
-      sku,
-      template,
+      sku: {
+        ...sku,
+        candidate_count: sku.candidate_count == null ? null : normalizeCandidateCount(sku.candidate_count)
+      },
+      template: template ? {
+        ...template,
+        default_candidate_count: template.default_candidate_count == null ? null : normalizeCandidateCount(template.default_candidate_count)
+      } : template,
       assets,
       candidates,
       tasks,

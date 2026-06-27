@@ -32,6 +32,7 @@ import AppHeader from "../components/AppHeader.jsx";
 
 const { Title, Paragraph, Text } = Typography;
 
+const MAX_CANDIDATE_COUNT = 4;
 const ASPECT_OPTIONS = [
   { value: "1:1", label: aspectLabel("1:1") },
   { value: "3:4", label: aspectLabel("3:4") },
@@ -39,6 +40,14 @@ const ASPECT_OPTIONS = [
   { value: "16:9", label: aspectLabel("16:9") },
   { value: "9:16", label: aspectLabel("9:16") },
 ];
+
+function clampCandidateCount(value, fallback = MAX_CANDIDATE_COUNT) {
+  const parsed = Number.parseInt(String(value), 10);
+  const fallbackParsed = Number.parseInt(String(fallback), 10);
+  const base = Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackParsed;
+  if (!Number.isFinite(base) || base < 1) return 1;
+  return Math.max(1, Math.min(MAX_CANDIDATE_COUNT, base));
+}
 
 function aspectLabel(value) {
   const cls = "aspect-graphic " + aspectClass(value);
@@ -87,7 +96,7 @@ export default function SkuWorkbench() {
   const load = useCallback(async () => {
     const json = await api("/api/skus/" + encodeURIComponent(skuId));
     setData(json);
-    setCount(json.sku.candidate_count || json.defaults?.candidateCount || 4);
+    setCount(clampCandidateCount(json.sku.candidate_count || json.defaults?.candidateCount || MAX_CANDIDATE_COUNT));
     setNotesDraft(json.sku.notes || "");
     setActiveNode((prev) => prev || (json.nodes[0] && json.nodes[0].key) || "");
     return json;
@@ -226,12 +235,13 @@ export default function SkuWorkbench() {
   }
 
   async function saveCount(value) {
-    setCount(value);
+    const nextCount = clampCandidateCount(value);
+    setCount(nextCount);
     try {
       await api("/api/skus/" + skuId + "/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ count: value }),
+        body: JSON.stringify({ count: nextCount }),
       });
     } catch (e) {
       Toast.error(e.message || "保存张数失败");
@@ -255,7 +265,7 @@ export default function SkuWorkbench() {
       if (r.files && r.files.length) {
         const form = new FormData();
         form.append("nodeKey", node.key);
-        form.append("count", String(count));
+        form.append("count", String(clampCandidateCount(count)));
         if (r.hint) form.append("retryHint", r.hint);
         for (const f of r.files) form.append("file", f.file);
         options = { method: "POST", body: form };
@@ -263,7 +273,7 @@ export default function SkuWorkbench() {
         options = {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nodeKey: node.key, count, retryHint: r.hint || "" }),
+          body: JSON.stringify({ nodeKey: node.key, count: clampCandidateCount(count), retryHint: r.hint || "" }),
         };
       }
       await api("/api/skus/" + skuId + "/generate", options);
@@ -327,7 +337,7 @@ export default function SkuWorkbench() {
           await api("/api/skus/" + skuId + "/generate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nodeKey: node.key, count }),
+            body: JSON.stringify({ nodeKey: node.key, count: clampCandidateCount(count) }),
           });
           ok += 1;
         } catch (e) {
@@ -588,7 +598,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
               </Tooltip>
             )}
             <Tooltip content="本次每个节点生成的候选张数（SKU 级）">
-              <InputNumber min={1} max={8} value={count} onChange={onCountChange} style={{ width: 110 }} suffix="张" />
+              <InputNumber min={1} max={MAX_CANDIDATE_COUNT} value={count} onChange={onCountChange} style={{ width: 110 }} suffix="张" />
             </Tooltip>
             <Button icon={<IconBolt />} theme="solid" type="primary" loading={busy} disabled={locked || busy} onClick={onGenerate}>
               生成候选
