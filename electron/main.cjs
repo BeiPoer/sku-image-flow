@@ -22,12 +22,8 @@ function appRoot() {
   return app.getAppPath();
 }
 
-function userDataRoot() {
-  return app.getPath("userData");
-}
-
 function dataDir() {
-  return path.join(userDataRoot(), "data");
+  return path.join(configDir, "data");
 }
 
 function exeDir() {
@@ -35,18 +31,10 @@ function exeDir() {
 }
 
 async function chooseConfigDir() {
-  const portableDir = process.env.PORTABLE_EXECUTABLE_DIR;
-  const candidates = [portableDir, exeDir(), userDataRoot()].filter(Boolean);
-  for (const dir of candidates) {
-    try {
-      await fsp.mkdir(dir, { recursive: true });
-      await fsp.access(dir, fs.constants.W_OK);
-      return dir;
-    } catch {
-      // try next candidate
-    }
-  }
-  return userDataRoot();
+  const dir = process.env.PORTABLE_EXECUTABLE_DIR || exeDir();
+  await fsp.mkdir(dir, { recursive: true });
+  await fsp.access(dir, fs.constants.W_OK);
+  return dir;
 }
 
 async function ensureStarterEnvFile() {

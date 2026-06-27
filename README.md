@@ -92,7 +92,7 @@ npm run build:exe
 
 脚本会先安装根依赖和 `web/` 依赖、构建前端，然后调用 `electron-builder` 生成 portable 版 exe，产物输出到 `release/`。
 
-打包后的程序会自动启动本地服务并打开本地页面。首次运行时，如果同目录没有 `.env.local`，程序会自动在配置目录里生成一个示例文件，你需要在里面填写：
+打包后的程序会自动启动本地服务并打开本地页面。首次运行时，如果同目录没有 `.env.local`，程序会自动在 exe 同目录生成一个示例文件，你需要在里面填写：
 
 ```env
 OPENAI_API_KEY=你的key
@@ -105,8 +105,8 @@ PORT=3678
 
 其中：
 
-- 用户数据默认保存在系统的用户配置目录
-- `.env.local` 会优先放在 exe 同目录；如果当前目录不可写，会自动回退到用户配置目录
+- 便携版会把 `.env.local` 和 `data/` 放在 exe 同目录
+- `API Key`、`API URL` 等系统设置保存在本地 SQLite 数据库 `data/app.db` 里
 - 如果你希望发给别人“开箱即用”，还需要把 API Key 和代理地址一并准备好
 
 ## 模板与节点
@@ -157,6 +157,7 @@ PORT=3678
 运行后会生成：
 
 ```text
+.env.local
 data/
   app.db
   uploads/
@@ -164,7 +165,7 @@ data/
   generated/
 ```
 
-`data/` 已加入 `.gitignore`。模板、节点、镜像参考图、候选图、最终选择、prompt 和生成记录都会保存在本地。
+便携版会把这些文件放在 exe 同目录。`data/` 已加入 `.gitignore`。模板、节点、镜像参考图、候选图、最终选择、prompt 和生成记录都会保存在本地。
 
 ## 导出
 
