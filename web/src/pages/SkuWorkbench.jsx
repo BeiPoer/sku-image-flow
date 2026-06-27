@@ -17,6 +17,7 @@ import {
 } from "@douyinfe/semi-ui";
 import {
   IconUpload,
+  IconRefresh,
   IconBolt,
   IconDownload,
   IconTick,
@@ -430,6 +431,7 @@ export default function SkuWorkbench() {
               value={notesDraft}
               onChange={setNotesDraft}
               autosize={{ minRows: 3, maxRows: 8 }}
+              style={{ width: "100%" }}
               placeholder={isMirror ? "可选：会参与该 SKU 下所有镜像节点生成，例如强调材质、质感、品牌调性或要避免的元素" : "可选：产品的零散信息，会参与生图提示词拼接"}
             />
             <Text type="tertiary" size="small" style={{ display: "block", marginTop: 8 }}>

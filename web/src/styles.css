@@ -362,6 +362,11 @@ body {
   border-color: var(--semi-color-primary);
   color: var(--semi-color-primary);
 }
+.wb-notes-panel {
+  flex: 1 1 360px;
+  min-width: 320px;
+  max-width: 100%;
+}
 
 .wb-main {
   display: grid;
