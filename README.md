@@ -15,11 +15,10 @@
 1. 新建模板（普通模板 / 镜像模板 / 复制现有模板）
 2. 在模板里按需调整节点与提示词
 3. 在模板下新建 SKU，上传主产品图和辅助参考图
-4. 用视觉模型分析产品信息
-5. 生成主图候选，人工选定 1 张主图
-6. 基于产品图与选定主图，逐节点生成详情图候选
-7. 每个节点人工选择最终图
-8. 一键下载 zip，包含最终图片、`prompts.json`、`selected.json`
+4. 生成主图候选，人工选定 1 张主图
+5. 基于产品图、SKU 名称、补充备注和通用一致性要求，逐节点生成详情图候选
+6. 每个节点人工选择最终图
+7. 一键下载 zip，包含最终图片、`prompts.json`、`selected.json`
 
 镜像模板的流程更短：
 
@@ -33,7 +32,7 @@
 
 - Node.js 24+
 - OpenAI 兼容代理地址
-- 支持 OpenAI Images API 和 Responses API
+- 支持 OpenAI Images API
 
 后端零运行时依赖，但前端（`web/`）需要先安装依赖并构建一次。
 
@@ -45,7 +44,6 @@
 OPENAI_API_KEY=你的key
 OPENAI_BASE_URL=https://你的代理地址/v1
 IMAGE_MODEL=gpt-image-2
-VISION_TEXT_MODEL=gpt-5.5
 DEFAULT_CANDIDATES=3
 PORT=3678
 ```
@@ -54,7 +52,6 @@ PORT=3678
 
 - `IMAGE_MODEL` 默认是 `gpt-image-2`
 - `OPENAI_BASE_URL` 应填写 OpenAI 兼容代理的 `/v1` 地址
-- `VISION_TEXT_MODEL` 用于产品图分析，默认是 `gpt-5.5`
 - `DEFAULT_CANDIDATES` 是每次生成候选图数量的全局兜底值，默认是 `3`；模板可设自己的默认张数，SKU 也可单独覆盖
 
 ## 启动
@@ -98,7 +95,6 @@ npm run build:exe
 OPENAI_API_KEY=你的key
 OPENAI_BASE_URL=https://你的代理地址/v1
 IMAGE_MODEL=gpt-image-2
-VISION_TEXT_MODEL=gpt-5.5
 DEFAULT_CANDIDATES=3
 PORT=3678
 ```

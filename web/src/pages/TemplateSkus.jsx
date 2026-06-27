@@ -28,7 +28,7 @@ const { Title, Paragraph, Text } = Typography;
 const STATUS_META = {
   draft: { label: "草稿", color: "grey" },
   uploaded: { label: "已上传", color: "blue" },
-  analyzed: { label: "已分析", color: "cyan" },
+  analyzed: { label: "已分析（历史）", color: "grey" },
   main_generated: { label: "主图候选已出", color: "amber" },
   main_selected: { label: "主图已定", color: "violet" },
   details_generated: { label: "详情图生成中", color: "teal" },

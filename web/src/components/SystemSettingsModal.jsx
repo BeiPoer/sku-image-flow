@@ -4,7 +4,7 @@ import { api } from "../api.js";
 
 const { Text } = Typography;
 
-// 系统设置弹窗：配置生图 API（URL / Key）、模型、默认候选数与生图单价。
+// 系统设置弹窗：配置生图 API（URL / Key）、图像模型、默认候选数与生图单价。
 // 配置保存在后端 app_config 表，运行时覆盖 .env。
 export default function SystemSettingsModal({ visible, onCancel, onSaved }) {
   const formApi = useRef(null);
@@ -25,7 +25,6 @@ export default function SystemSettingsModal({ visible, onCancel, onSaved }) {
           openaiBaseUrl: c.openaiBaseUrl || "",
           openaiApiKey: "",
           imageModel: c.imageModel || "",
-          visionTextModel: c.visionTextModel || "",
           defaultCandidates: c.defaultCandidates ?? 4,
           unitPrice: c.unitPrice ?? 0,
         });
@@ -108,12 +107,6 @@ export default function SystemSettingsModal({ visible, onCancel, onSaved }) {
           label="图像模型"
           placeholder="例如 gpt-image-2"
           rules={[{ required: true, message: "请填写图像模型" }]}
-        />
-        <Form.Input
-          field="visionTextModel"
-          label="视觉/文本模型"
-          placeholder="例如 gpt-5-mini（用于产品分析）"
-          rules={[{ required: true, message: "请填写视觉/文本模型" }]}
         />
         <Form.InputNumber
           field="defaultCandidates"

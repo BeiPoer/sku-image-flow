@@ -49,7 +49,6 @@ async function ensureStarterEnvFile() {
     "OPENAI_API_KEY=",
     "OPENAI_BASE_URL=https://api.openai.com/v1",
     "IMAGE_MODEL=gpt-image-2",
-    "VISION_TEXT_MODEL=gpt-5.5",
     "DEFAULT_CANDIDATES=3",
     "PORT=3678",
     ""

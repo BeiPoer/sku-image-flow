@@ -45,7 +45,6 @@ const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   openaiBaseUrl: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, ""),
   imageModel: process.env.IMAGE_MODEL || "gpt-image-2",
-  visionTextModel: process.env.VISION_TEXT_MODEL || "gpt-5.5",
   defaultCandidates: Number.parseInt(process.env.DEFAULT_CANDIDATES || "3", 10) || 3,
   unitPrice: Number.parseFloat(process.env.UNIT_PRICE || "0") || 0
 };
@@ -54,7 +53,6 @@ const CONFIG_KEYS = {
   openaiApiKey: "openai_api_key",
   openaiBaseUrl: "openai_base_url",
   imageModel: "image_model",
-  visionTextModel: "vision_text_model",
   defaultCandidates: "default_candidates",
   unitPrice: "unit_price"
 };
@@ -152,8 +150,6 @@ function applyConfigFromDb() {
   if (baseUrl != null && baseUrl.trim()) config.openaiBaseUrl = baseUrl.trim().replace(/\/+$/, "");
   const imageModel = getConfig(CONFIG_KEYS.imageModel);
   if (imageModel != null && imageModel.trim()) config.imageModel = imageModel.trim();
-  const visionModel = getConfig(CONFIG_KEYS.visionTextModel);
-  if (visionModel != null && visionModel.trim()) config.visionTextModel = visionModel.trim();
   const candidates = Number.parseInt(getConfig(CONFIG_KEYS.defaultCandidates), 10);
   if (Number.isFinite(candidates) && candidates > 0) config.defaultCandidates = candidates;
   const unitPrice = Number.parseFloat(getConfig(CONFIG_KEYS.unitPrice));
@@ -538,11 +534,10 @@ function getSku(id) {
 function updateSku(id, input) {
   const current = getSku(id);
   if (!current) throw new Error("SKU 不存在。");
-  db.prepare(`UPDATE sku SET name = ?, notes = ?, analysis_json = ?, selected_main_asset_id = ?, status = ?, updated_at = ? WHERE id = ?`)
+  db.prepare(`UPDATE sku SET name = ?, notes = ?, selected_main_asset_id = ?, status = ?, updated_at = ? WHERE id = ?`)
     .run(
       input.name ?? current.name,
       input.notes === undefined ? current.notes : input.notes,
-      input.analysis_json === undefined ? current.analysis_json : input.analysis_json,
       input.selected_main_asset_id === undefined ? current.selected_main_asset_id : input.selected_main_asset_id,
       input.status ?? current.status,
       now(),
@@ -613,8 +608,6 @@ function recomputeSkuStatus(skuId) {
 
   const candidateCount = row("SELECT COUNT(*) AS n FROM candidate_image WHERE sku_id = ?", skuId)?.n || 0;
   if (candidateCount > 0) return "details_generated";
-
-  if (sku.analysis_json) return "analyzed";
 
   const uploadCount = row("SELECT COUNT(*) AS n FROM asset WHERE sku_id = ? AND source_type = 'upload' AND role != 'retry'", skuId)?.n || 0;
   if (uploadCount > 0) return "uploaded";
@@ -860,15 +853,6 @@ function getNode(key) {
   return node;
 }
 
-function parseAnalysis(raw) {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return { raw };
-  }
-}
-
 function parseAspects(raw) {
   if (!raw) return {};
   try {
@@ -901,7 +885,6 @@ function effectiveCandidateCount({ requested, sku, template }) {
 // 每块：kind 类型；label 显示名；hint 「如何修改」提示；editable 是否可由用户改；
 //       present 本次是否参与拼接；text 该块拼进最终提示词的完整文本。
 function buildImageSegments({ node, sku, template, retryHint = "" }) {
-  const analysis = parseAnalysis(sku.analysis_json);
   const segs = [];
   segs.push({
     kind: "task", label: "任务（节点提示词）", editable: true, present: true,
@@ -918,28 +901,11 @@ function buildImageSegments({ node, sku, template, retryHint = "" }) {
     hint: "来自新建 SKU 时填写的零散备注，留空则不参与拼接",
     text: sku.notes ? `补充信息：${sku.notes}` : ""
   });
-  const aLines = [];
-  if (analysis?.category) aLines.push(`产品品类：${analysis.category}`);
-  if (analysis?.style) aLines.push(`产品风格：${analysis.style}`);
-  if (analysis?.material) aLines.push(`材质信息：${analysis.material}`);
-  if (Array.isArray(analysis?.colors) && analysis.colors.length) aLines.push(`主要颜色：${analysis.colors.join("、")}`);
-  if (Array.isArray(analysis?.sellingPoints) && analysis.sellingPoints.length) aLines.push(`核心卖点：${analysis.sellingPoints.join("、")}`);
-  segs.push({
-    kind: "analysis", label: "产品分析信息", editable: false, present: aLines.length > 0,
-    hint: "由「分析产品」自动生成，重新分析可更新；为空时不参与拼接",
-    text: aLines.join("\n")
-  });
   const rulesText = templateConsistencyText(template);
   segs.push({
     kind: "consistency", label: "通用一致性要求", editable: true, present: Boolean(rulesText),
     hint: "在模板的「模板设置」里修改通用一致性要求",
     text: rulesText ? `一致性要求：\n${rulesText}` : ""
-  });
-  const extra = Array.isArray(analysis?.consistencyRules) ? analysis.consistencyRules : [];
-  segs.push({
-    kind: "analysis_consistency", label: "补充一致性约束", editable: false, present: extra.length > 0,
-    hint: "由「分析产品」自动生成；为空时不参与拼接",
-    text: extra.length ? ["补充一致性约束：", ...extra.map((item) => `- ${item}`)].join("\n") : ""
   });
   segs.push({
     kind: "retry", label: "本次重跑修正重点", editable: true, present: Boolean(retryHint),
@@ -1001,18 +967,6 @@ function buildMirrorImageSegments({ node, sku, retryHint = "" }) {
     });
   }
   return segs;
-}
-
-function buildAnalysisPrompt(sku) {
-  return [
-    "你是电商图片生成工作流里的产品分析助手。",
-    "请根据上传的产品图和用户备注，提炼后续生图所需的信息。",
-    "只返回 JSON，不要输出 Markdown。",
-    "JSON 字段：category, style, material, colors, sellingPoints, consistencyRules, raw。",
-    "consistencyRules 要重点描述哪些外观元素必须保持一致。",
-    `SKU/产品名称：${sku.name}`,
-    sku.notes ? `用户备注：${sku.notes}` : "用户备注：无"
-  ].join("\n");
 }
 
 async function readJson(req) {
@@ -1163,43 +1117,6 @@ async function generateImages({ prompt, count, referenceAssets, size }) {
   return createImages(prompt, count, size);
 }
 
-async function analyzeProduct(sku, imageAssets) {
-  const content = [{ type: "input_text", text: buildAnalysisPrompt(sku) }];
-  for (const asset of imageAssets.slice(0, 8)) {
-    const bytes = await readFile(asset.file_path);
-    content.push({
-      type: "input_image",
-      image_url: `data:${inferMime(asset.file_path)};base64,${bytes.toString("base64")}`
-    });
-  }
-  const response = await apiFetch("/responses", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: config.visionTextModel,
-      input: [{ role: "user", content }]
-    })
-  });
-  const json = await response.json();
-  if (typeof json.output_text === "string") return json.output_text;
-  const parts = [];
-  for (const item of json.output || []) {
-    for (const contentItem of item.content || []) {
-      if (typeof contentItem.text === "string") parts.push(contentItem.text);
-    }
-  }
-  return parts.join("\n").trim();
-}
-
-function parseJsonLoose(text) {
-  const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    return { raw: text };
-  }
-}
-
 async function saveGeneratedImage({ skuId, nodeKey, b64, mimeType, index }) {
   const dir = path.join(generatedDir, skuId, nodeKey);
   await mkdir(dir, { recursive: true });
@@ -1217,7 +1134,6 @@ async function handleApi(req, res, url) {
         config: {
           openaiBaseUrl: config.openaiBaseUrl,
           imageModel: config.imageModel,
-          visionTextModel: config.visionTextModel,
           defaultCandidates: config.defaultCandidates,
           unitPrice: config.unitPrice,
           hasApiKey: Boolean(key),
@@ -1242,10 +1158,6 @@ async function handleApi(req, res, url) {
         setConfig(CONFIG_KEYS.imageModel, body.imageModel.trim());
         config.imageModel = body.imageModel.trim();
       }
-      if (typeof body.visionTextModel === "string" && body.visionTextModel.trim()) {
-        setConfig(CONFIG_KEYS.visionTextModel, body.visionTextModel.trim());
-        config.visionTextModel = body.visionTextModel.trim();
-      }
       if (body.defaultCandidates !== undefined && body.defaultCandidates !== null && body.defaultCandidates !== "") {
         const n = Number.parseInt(body.defaultCandidates, 10);
         if (!Number.isFinite(n) || n < 1) return sendJson(res, 400, { error: "默认候选数需为正整数" });
@@ -1263,7 +1175,6 @@ async function handleApi(req, res, url) {
         config: {
           openaiBaseUrl: config.openaiBaseUrl,
           imageModel: config.imageModel,
-          visionTextModel: config.visionTextModel,
           defaultCandidates: config.defaultCandidates,
           unitPrice: config.unitPrice,
           hasApiKey: Boolean(key),
@@ -1649,7 +1560,7 @@ async function handleApi(req, res, url) {
       skuId
     )?.n || 0;
     if (remainingUploads === 0) {
-      updateSku(skuId, { analysis_json: null, selected_main_asset_id: null });
+      updateSku(skuId, { selected_main_asset_id: null });
     }
 
     const nextStatus = recomputeSkuStatus(skuId);
@@ -1657,24 +1568,8 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true, status: nextStatus });
   }
 
-  if (req.method === "POST" && action === "analyze") {
-    const imageAssets = rows("SELECT * FROM asset WHERE sku_id = ? AND source_type = 'upload' ORDER BY created_at ASC", skuId);
-    if (!imageAssets.length) return sendJson(res, 400, { error: "请先上传产品图" });
-    const text = await analyzeProduct(sku, imageAssets);
-    const analysis = parseJsonLoose(text);
-    const updated = updateSku(skuId, { analysis_json: JSON.stringify(analysis, null, 2), status: "analyzed" });
-    return sendJson(res, 200, { sku: updated, analysis });
-  }
-
-  // 保存人工编辑后的产品分析（生图时即用改后的内容）
-  if (req.method === "POST" && action === "analysis") {
-    const body = await readJson(req);
-    const incoming = body && typeof body.analysis === "object" && body.analysis ? body.analysis : {};
-    // 与既有分析合并，保留未在表单出现的字段（如 raw、consistencyRules）
-    const prev = parseAnalysis(sku.analysis_json) || {};
-    const merged = { ...prev, ...incoming };
-    const updated = updateSku(skuId, { analysis_json: JSON.stringify(merged, null, 2), status: "analyzed" });
-    return sendJson(res, 200, { sku: updated, analysis: merged });
+  if (req.method === "POST" && (action === "analyze" || action === "analysis")) {
+    return sendJson(res, 410, { error: "普通 SKU 产品分析功能已移除" });
   }
 
   if (req.method === "POST" && action === "settings") {

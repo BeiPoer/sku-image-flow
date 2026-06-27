@@ -5,7 +5,6 @@ import {
   Card,
   Collapse,
   Empty,
-  Input,
   InputNumber,
   Select,
   Spin,
@@ -18,7 +17,6 @@ import {
 } from "@douyinfe/semi-ui";
 import {
   IconUpload,
-  IconRefresh,
   IconBolt,
   IconDownload,
   IconTick,
@@ -76,10 +74,6 @@ export default function SkuWorkbench() {
   const [loading, setLoading] = useState(true);
   const [activeNode, setActiveNode] = useState("");
   const [busyNodes, setBusyNodes] = useState({}); // nodeKey -> true
-  const [analyzing, setAnalyzing] = useState(false);
-  const [editingAnalysis, setEditingAnalysis] = useState(false);
-  const [analysisDraft, setAnalysisDraft] = useState(null);
-  const [savingAnalysis, setSavingAnalysis] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [retry, setRetry] = useState({}); // nodeKey -> { hint, files: File[] }
   const [count, setCount] = useState(4);
@@ -150,7 +144,6 @@ export default function SkuWorkbench() {
     } catch { /* 忽略损坏的 JSON */ }
   }
   const sourceAssets = assets.filter((a) => a.role !== "retry" && a.source_type === "upload");
-  const analysis = sku.analysis_json ? safeParse(sku.analysis_json) : null;
   const selectedCount = candidates.filter((c) => c.selected).length;
   const mainNode = nodes.find((n) => n.isMain);
   const hasSelectedMain = Boolean(sku.selected_main_asset_id);
@@ -201,19 +194,6 @@ export default function SkuWorkbench() {
     }
   }
 
-  async function analyze() {
-    setAnalyzing(true);
-    try {
-      await api("/api/skus/" + skuId + "/analyze", { method: "POST" });
-      Toast.success("产品分析完成");
-      await load();
-    } catch (e) {
-      Toast.error(e.message || "分析失败");
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
   async function saveNotes() {
     setSavingNotes(true);
     try {
@@ -228,52 +208,6 @@ export default function SkuWorkbench() {
       Toast.error(e.message || "保存失败");
     } finally {
       setSavingNotes(false);
-    }
-  }
-
-  // 进入分析编辑态：把现有分析填进草稿（数组转成顿号分隔的字符串便于编辑）
-  function startEditAnalysis(a) {
-    setAnalysisDraft({
-      category: a?.category || "",
-      style: a?.style || "",
-      material: a?.material || "",
-      colors: Array.isArray(a?.colors) ? a.colors.join("、") : "",
-      sellingPoints: Array.isArray(a?.sellingPoints) ? a.sellingPoints.join("、") : "",
-    });
-    setEditingAnalysis(true);
-  }
-
-  function splitList(text) {
-    return String(text || "")
-      .split(/[、,，\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-
-  async function saveAnalysis() {
-    const d = analysisDraft || {};
-    const payload = {
-      category: d.category.trim(),
-      style: d.style.trim(),
-      material: d.material.trim(),
-      colors: splitList(d.colors),
-      sellingPoints: splitList(d.sellingPoints),
-    };
-    setSavingAnalysis(true);
-    try {
-      await api("/api/skus/" + skuId + "/analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysis: payload }),
-      });
-      Toast.success("产品分析已保存");
-      setEditingAnalysis(false);
-      setAnalysisDraft(null);
-      await load();
-    } catch (e) {
-      Toast.error(e.message || "保存失败");
-    } finally {
-      setSavingAnalysis(false);
     }
   }
 
@@ -445,7 +379,7 @@ export default function SkuWorkbench() {
         }
       />
 
-      <Card className="panel" title={<span className="panel-title"><IconImage /> {isMirror ? "商品图与全局提示词" : "产品图与分析"}</span>}>
+      <Card className="panel" title={<span className="panel-title"><IconImage /> {isMirror ? "商品图与全局提示词" : "产品图与提示词"}</span>}>
         <div className="wb-product">
           <div className="wb-thumbs">
             {sourceAssets.map((a) => (
@@ -485,85 +419,25 @@ export default function SkuWorkbench() {
             />
           </div>
 
-          {isMirror ? (
-            <div className="wb-analysis">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <Text strong>SKU 全局提示词</Text>
-                <Button size="small" theme="solid" type="primary" loading={savingNotes} onClick={saveNotes}>
-                  保存
-                </Button>
-              </div>
-              <TextArea
-                value={notesDraft}
-                onChange={setNotesDraft}
-                autosize={{ minRows: 3, maxRows: 8 }}
-                placeholder="可选：会参与该 SKU 下所有镜像节点生成，例如强调材质、质感、品牌调性或要避免的元素"
-              />
-              <Text type="tertiary" size="small" style={{ display: "block", marginTop: 8 }}>
-                镜像模板不做产品分析；生成时会使用模板参考图、这张商品图、SKU 全局提示词和节点级重跑修正。
-              </Text>
+          <div className="wb-notes-panel">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <Text strong>{isMirror ? "SKU 全局提示词" : "补充备注"}</Text>
+              <Button size="small" theme="solid" type="primary" loading={savingNotes} onClick={saveNotes}>
+                保存
+              </Button>
             </div>
-          ) : (
-            <div className="wb-analysis">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <Text strong>产品分析</Text>
-                {!editingAnalysis && (
-                  <div style={{ display: "inline-flex", gap: 8 }}>
-                    {analysis && (
-                      <Button size="small" theme="borderless" onClick={() => startEditAnalysis(analysis)}>
-                        编辑
-                      </Button>
-                    )}
-                    <Button
-                      icon={<IconRefresh />}
-                      size="small"
-                      theme="light"
-                      loading={analyzing}
-                      disabled={!sourceAssets.length}
-                      onClick={analyze}
-                    >
-                      {analysis ? "重新分析" : "分析产品"}
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {editingAnalysis ? (
-                <div className="wb-analysis-edit">
-                  <label>品类</label>
-                  <Input value={analysisDraft.category} onChange={(v) => setAnalysisDraft((s) => ({ ...s, category: v }))} placeholder="产品品类" />
-                  <label>风格</label>
-                  <Input value={analysisDraft.style} onChange={(v) => setAnalysisDraft((s) => ({ ...s, style: v }))} placeholder="产品风格" />
-                  <label>材质</label>
-                  <Input value={analysisDraft.material} onChange={(v) => setAnalysisDraft((s) => ({ ...s, material: v }))} placeholder="材质信息" />
-                  <label>颜色（顿号 / 逗号 / 换行分隔多个）</label>
-                  <TextArea value={analysisDraft.colors} onChange={(v) => setAnalysisDraft((s) => ({ ...s, colors: v }))} autosize={{ minRows: 1, maxRows: 3 }} placeholder="如：黑、银、玫瑰金" />
-                  <label>核心卖点（顿号 / 逗号 / 换行分隔多个）</label>
-                  <TextArea value={analysisDraft.sellingPoints} onChange={(v) => setAnalysisDraft((s) => ({ ...s, sellingPoints: v }))} autosize={{ minRows: 2, maxRows: 5 }} placeholder="如：防水、夜光、蓝宝石镜面" />
-                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                    <Button theme="solid" type="primary" size="small" loading={savingAnalysis} onClick={saveAnalysis}>保存</Button>
-                    <Button theme="borderless" size="small" onClick={() => { setEditingAnalysis(false); setAnalysisDraft(null); }}>取消</Button>
-                  </div>
-                </div>
-              ) : analysis ? (
-                <div className="wb-analysis-body">
-                  {analysis.category && <span><b>品类：</b>{analysis.category}</span>}
-                  {analysis.style && <span><b>风格：</b>{analysis.style}</span>}
-                  {analysis.material && <span><b>材质：</b>{analysis.material}</span>}
-                  {Array.isArray(analysis.colors) && analysis.colors.length > 0 && (
-                    <span><b>颜色：</b>{analysis.colors.join("、")}</span>
-                  )}
-                  {Array.isArray(analysis.sellingPoints) && analysis.sellingPoints.length > 0 && (
-                    <span><b>卖点：</b>{analysis.sellingPoints.join("、")}</span>
-                  )}
-                </div>
-              ) : (
-                <Text type="tertiary" size="small">
-                  {sourceAssets.length ? "点「分析产品」让视觉模型提炼品类、材质、卖点，会参与生图提示词。" : "先上传产品图，再分析。"}
-                </Text>
-              )}
-            </div>
-          )}
+            <TextArea
+              value={notesDraft}
+              onChange={setNotesDraft}
+              autosize={{ minRows: 3, maxRows: 8 }}
+              placeholder={isMirror ? "可选：会参与该 SKU 下所有镜像节点生成，例如强调材质、质感、品牌调性或要避免的元素" : "可选：产品的零散信息，会参与生图提示词拼接"}
+            />
+            <Text type="tertiary" size="small" style={{ display: "block", marginTop: 8 }}>
+              {isMirror
+                ? "镜像模板会使用模板参考图、这张商品图、SKU 全局提示词和节点级重跑修正。"
+                : "普通 SKU 会使用产品图、SKU 名称、补充备注、通用一致性要求和重跑修正。"}
+            </Text>
+          </div>
         </div>
       </Card>
 
@@ -906,12 +780,4 @@ function PromptArticle({ segments }) {
       )}
     </div>
   );
-}
-
-function safeParse(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
 }

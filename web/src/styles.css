@@ -362,17 +362,6 @@ body {
   border-color: var(--semi-color-primary);
   color: var(--semi-color-primary);
 }
-.wb-analysis {
-  flex: 1;
-  min-width: 280px;
-}
-.wb-analysis-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 14px;
-  color: var(--semi-color-text-1);
-}
 
 .wb-main {
   display: grid;
@@ -583,15 +572,13 @@ body {
   outline-color: var(--semi-color-border);
 }
 /* 按来源配色，统一用 Semi 语义色（跟随主题）：
-   节点提示词/一致性=主色，产品标识=青，分析=绿，重跑=橙，输出=中性 */
+   节点提示词/一致性=主色，产品标识=青，重跑=橙，输出=中性 */
 .pp-seg-task { background: var(--semi-color-primary-light-default); color: var(--semi-color-primary); }
 .pp-seg-mirror_task { background: var(--semi-color-primary-light-default); color: var(--semi-color-primary); }
 .pp-seg-mirror_product { background: var(--semi-color-success-light-default); color: var(--semi-color-success); }
 .pp-seg-consistency { background: var(--semi-color-primary-light-default); color: var(--semi-color-primary); }
 .pp-seg-sku_name { background: var(--semi-color-info-light-default); color: var(--semi-color-info); }
 .pp-seg-notes { background: var(--semi-color-info-light-default); color: var(--semi-color-info); }
-.pp-seg-analysis { background: var(--semi-color-success-light-default); color: var(--semi-color-success); }
-.pp-seg-analysis_consistency { background: var(--semi-color-success-light-default); color: var(--semi-color-success); }
 .pp-seg-retry { background: var(--semi-color-warning-light-default); color: var(--semi-color-warning); }
 .pp-seg-output { background: var(--semi-color-fill-1); color: var(--semi-color-text-2); }
 .pp-seg-reference { background: var(--semi-color-fill-1); color: var(--semi-color-text-2); }
@@ -649,14 +636,6 @@ body {
 .sku-name-link { cursor: pointer; }
 .sku-name-link:hover { color: var(--semi-color-primary); }
 .sku-name-link:hover .tpl-go { transform: translateX(3px); color: var(--semi-color-primary); }
-
-/* 产品分析编辑表单 */
-.wb-analysis-edit { display: flex; flex-direction: column; gap: 4px; }
-.wb-analysis-edit label {
-  font-size: 12.5px;
-  color: var(--semi-color-text-2);
-  margin-top: 6px;
-}
 
 /* 模板设置 - 短语列表 */
 .phrase-list { display: flex; flex-wrap: wrap; gap: 8px; }
