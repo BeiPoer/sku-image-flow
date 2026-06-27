@@ -45,8 +45,8 @@
 OPENAI_API_KEY=你的key
 OPENAI_BASE_URL=https://你的代理地址/v1
 IMAGE_MODEL=gpt-image-2
-VISION_TEXT_MODEL=gpt-5-mini
-DEFAULT_CANDIDATES=4
+VISION_TEXT_MODEL=gpt-5.5
+DEFAULT_CANDIDATES=3
 PORT=3678
 ```
 
@@ -54,8 +54,8 @@ PORT=3678
 
 - `IMAGE_MODEL` 默认是 `gpt-image-2`
 - `OPENAI_BASE_URL` 应填写 OpenAI 兼容代理的 `/v1` 地址
-- `VISION_TEXT_MODEL` 用于产品图分析
-- `DEFAULT_CANDIDATES` 是每次生成候选图数量的全局兜底值；模板可设自己的默认张数，SKU 也可单独覆盖
+- `VISION_TEXT_MODEL` 用于产品图分析，默认是 `gpt-5.5`
+- `DEFAULT_CANDIDATES` 是每次生成候选图数量的全局兜底值，默认是 `3`；模板可设自己的默认张数，SKU 也可单独覆盖
 
 ## 启动
 
@@ -98,8 +98,8 @@ npm run build:exe
 OPENAI_API_KEY=你的key
 OPENAI_BASE_URL=https://你的代理地址/v1
 IMAGE_MODEL=gpt-image-2
-VISION_TEXT_MODEL=gpt-5-mini
-DEFAULT_CANDIDATES=4
+VISION_TEXT_MODEL=gpt-5.5
+DEFAULT_CANDIDATES=3
 PORT=3678
 ```
 

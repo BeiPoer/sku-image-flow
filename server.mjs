@@ -45,8 +45,8 @@ const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || "",
   openaiBaseUrl: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, ""),
   imageModel: process.env.IMAGE_MODEL || "gpt-image-2",
-  visionTextModel: process.env.VISION_TEXT_MODEL || "gpt-5-mini",
-  defaultCandidates: Number.parseInt(process.env.DEFAULT_CANDIDATES || "4", 10) || 4,
+  visionTextModel: process.env.VISION_TEXT_MODEL || "gpt-5.5",
+  defaultCandidates: Number.parseInt(process.env.DEFAULT_CANDIDATES || "3", 10) || 3,
   unitPrice: Number.parseFloat(process.env.UNIT_PRICE || "0") || 0
 };
 // 系统设置以数据库（app_config）为准，覆盖上面的 .env 默认值；键名见下。
