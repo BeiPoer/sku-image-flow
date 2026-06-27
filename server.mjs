@@ -84,6 +84,15 @@ const nodes = [
   ["lens_feature", 12, "镜片功能图", "镜片或核心功能展示图。", true, "生成一张镜片或核心功能展示图，突出镜面、表盘、材质、防刮或通透质感等功能特征。画面专业、清晰、高级，保持产品主体一致，不要生成错误文字。"]
 ].map(([key, order, label, description, usesSelectedMain, prompt]) => ({ key, order, label, description, usesSelectedMain, prompt, defaultAspect: key === "main" ? "1:1" : "9:16" }));
 
+const WATCH_PHRASES = [
+  "这是一款女士手表",
+  "这是一款男士手表",
+  "要突出手表的力量感",
+  "要突出手表的柔美",
+  "注意不要文字排版",
+  "需要文字排版"
+];
+
 async function loadEnvFile(filePath) {
   if (!existsSync(filePath)) return;
   const text = await readFile(filePath, "utf8");
@@ -732,15 +741,21 @@ function nextMirrorNodeKey(templateId) {
   return key;
 }
 
-function createTemplate({ name, description, consistencyRules, defaultCandidateCount, nodes: seedNodes, kind = "normal" }) {
+function createTemplate({ name, description, consistencyRules, defaultCandidateCount, phrases = null, nodes: seedNodes, kind = "normal" }) {
   const id = randomUUID();
   const ts = now();
   const safeKind = kind === "mirror" ? "mirror" : "normal";
-  db.prepare(`INSERT INTO template (id, name, kind, description, consistency_rules, default_candidate_count, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+  db.prepare(`INSERT INTO template (id, name, kind, description, consistency_rules, default_candidate_count, phrases, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, name, safeKind, description || null,
       (() => { const t = toConsistencyText(consistencyRules).trim(); return t || null; })(),
-      defaultCandidateCount ?? null, ts, ts);
+      defaultCandidateCount ?? null,
+      (() => {
+        if (!Array.isArray(phrases)) return null;
+        const list = phrases.map((p) => String(p == null ? "" : p).trim()).filter(Boolean).map((p) => p.slice(0, 100)).slice(0, 50);
+        return list.length ? JSON.stringify(list) : null;
+      })(),
+      ts, ts);
   if (safeKind !== "mirror" && Array.isArray(seedNodes)) {
     seedNodes.forEach((n, i) => insertTemplateNode(id, n, n.ord ?? i + 1));
   }
@@ -815,6 +830,10 @@ function watchPresetNodes({ withOverrides = false } = {}) {
   }));
 }
 
+function watchPresetPhrases() {
+  return [...WATCH_PHRASES];
+}
+
 // 首次升级：把旧的固定流程迁成一个内置「手表」模板，存量 SKU 归入它
 function migrateTemplates() {
   const count = row("SELECT COUNT(*) AS n FROM template");
@@ -825,6 +844,7 @@ function migrateTemplates() {
       description: "默认详情图模板（迁移自旧版固定流程）",
       consistencyRules: effectiveConsistencyRules(),
       defaultCandidateCount: null,
+      phrases: watchPresetPhrases(),
       nodes: watchPresetNodes({ withOverrides: true })
     });
     defaultTemplateId = tpl.id;
@@ -1279,6 +1299,7 @@ async function handleApi(req, res, url) {
       let seedNodes = [];
       let consistency = consistencyRules;
       let defCount = null;
+      let copiedPhrases = null;
       let kind = "normal";
       let copiedTemplate = null;
       if (body.copyFrom) {
@@ -1294,8 +1315,17 @@ async function handleApi(req, res, url) {
         }
         consistency = templateConsistencyText(src);
         defCount = src.default_candidate_count;
+        if (src.phrases) {
+          try {
+            const list = JSON.parse(src.phrases);
+            if (Array.isArray(list)) copiedPhrases = list.map((p) => String(p == null ? "" : p).trim()).filter(Boolean).map((p) => p.slice(0, 100)).slice(0, 50);
+          } catch {
+            copiedPhrases = [];
+          }
+        }
       } else if (body.preset === "watch") {
         seedNodes = watchPresetNodes();
+        copiedPhrases = watchPresetPhrases();
       } else {
         // 空白模板：预置一个主图首节点，后续节点默认依赖主图
         seedNodes = [{
@@ -1305,7 +1335,7 @@ async function handleApi(req, res, url) {
       }
       const tpl = createTemplate({
         name, description: body.description?.trim() || null,
-        consistencyRules: consistency, defaultCandidateCount: defCount, nodes: seedNodes, kind
+        consistencyRules: consistency, defaultCandidateCount: defCount, phrases: copiedPhrases, nodes: seedNodes, kind
       });
       if (kind === "mirror" && copiedTemplate) {
         await copyMirrorTemplateImages(copiedTemplate.id, tpl.id);
@@ -1329,6 +1359,7 @@ async function handleApi(req, res, url) {
       description: fields.description?.trim() || null,
       consistencyRules: null,
       defaultCandidateCount: null,
+      phrases: [],
       nodes: [],
       kind: "mirror"
     });
