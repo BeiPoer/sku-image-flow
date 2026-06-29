@@ -25,6 +25,7 @@ import {
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
 import AppHeader from "../components/AppHeader.jsx";
+import { imageFilesFromClipboard, isEditablePasteTarget } from "../utils/clipboardImages.js";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -333,6 +334,27 @@ export default function TemplateSettings() {
     uploadImages(e.dataTransfer?.files);
   }
 
+  function handleImagePaste(e) {
+    if (isEditablePasteTarget(e.target)) return;
+    const files = imageFilesFromClipboard(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    uploadImages(files);
+  }
+
+  useEffect(() => {
+    if (templateKind !== "mirror") return undefined;
+    const onPaste = (e) => {
+      if (e.defaultPrevented || isEditablePasteTarget(e.target)) return;
+      const files = imageFilesFromClipboard(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      uploadImages(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [templateKind, templateId]);
+
   function removeNode(uid) {
     setNodes((prev) => prev.filter((n) => n._uid !== uid));
   }
@@ -493,13 +515,15 @@ export default function TemplateSettings() {
           }
         >
           <Paragraph type="tertiary" style={{ marginBottom: 16 }}>
-            每张参考图就是一个镜像节点。这里只管理参考图的顺序、比例和增删，不配置节点提示词或主图依赖。可点击追加，也可把图片拖到下方区域。
+            每张参考图就是一个镜像节点。这里只管理参考图的顺序、比例和增删，不配置节点提示词或主图依赖。可点击追加、拖拽图片，或直接 Ctrl+V 粘贴图片。
           </Paragraph>
           <div
             className={"mirror-image-list" + (imageDragOver ? " dragover" : "")}
+            tabIndex={0}
             onDragOver={(e) => { e.preventDefault(); setImageDragOver(true); }}
             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setImageDragOver(false); }}
             onDrop={handleImageDrop}
+            onPaste={handleImagePaste}
           >
             {templateImages.map((img, i) => (
               <div className="mirror-image-row" key={img.id}>

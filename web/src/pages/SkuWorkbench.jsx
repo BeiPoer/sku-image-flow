@@ -29,6 +29,7 @@ import {
 } from "@douyinfe/semi-icons";
 import { api } from "../api.js";
 import AppHeader from "../components/AppHeader.jsx";
+import { imageFilesFromClipboard, isEditablePasteTarget } from "../utils/clipboardImages.js";
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -134,6 +135,41 @@ export default function SkuWorkbench() {
     return () => clearInterval(timer);
   }, [hasRunning, load]);
 
+  const isMirror = data?.template?.kind === "mirror";
+
+  const uploadSource = useCallback(async (fileList) => {
+    if (!data) return;
+    const files = Array.from(fileList || []).filter((file) => (file.type || "").startsWith("image/"));
+    if (!files.length) return;
+    const uploadFiles = isMirror ? files.slice(0, 1) : files;
+    const form = new FormData();
+    form.append("role", "source");
+    for (const f of uploadFiles) form.append("file", f);
+    try {
+      await api("/api/skus/" + skuId + "/upload", { method: "POST", body: form });
+      Toast.success(isMirror ? "商品图已更新" : "已上传 " + uploadFiles.length + " 张产品图");
+      await load();
+    } catch (e) {
+      Toast.error(e.message || "上传失败");
+    }
+    if (sourceInputRef.current) sourceInputRef.current.value = "";
+  }, [data, isMirror, load, skuId]);
+
+  useEffect(() => {
+    if (!data) return undefined;
+    const onPaste = (e) => {
+      if (e.defaultPrevented) return;
+      const target = typeof Element !== "undefined" && e.target instanceof Element ? e.target : null;
+      if (target?.closest(".wb-retry-box") || isEditablePasteTarget(e.target)) return;
+      const files = imageFilesFromClipboard(e.clipboardData);
+      if (!files.length) return;
+      e.preventDefault();
+      uploadSource(files);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [data, uploadSource]);
+
   if (loading || !data) {
     return (
       <div className="page wb-page">
@@ -144,7 +180,6 @@ export default function SkuWorkbench() {
   }
 
   const { sku, template, assets, candidates, nodes } = data;
-  const isMirror = template?.kind === "mirror";
   // 模板级短语（重跑快填用）
   let phrases = [];
   if (template && template.phrases) {
@@ -171,23 +206,6 @@ export default function SkuWorkbench() {
     if (node.usesSelectedMain && !hasSelectedMain) return { kind: "locked" };
     if (list.length) return { kind: "has-candidates" };
     return { kind: "empty" };
-  }
-
-  async function uploadSource(fileList) {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
-    const uploadFiles = isMirror ? files.slice(0, 1) : files;
-    const form = new FormData();
-    form.append("role", "source");
-    for (const f of uploadFiles) form.append("file", f);
-    try {
-      await api("/api/skus/" + skuId + "/upload", { method: "POST", body: form });
-      Toast.success(isMirror ? "商品图已更新" : "已上传 " + uploadFiles.length + " 张产品图");
-      await load();
-    } catch (e) {
-      Toast.error(e.message || "上传失败");
-    }
-    if (sourceInputRef.current) sourceInputRef.current.value = "";
   }
 
   async function deleteSourceAsset(asset) {
@@ -370,6 +388,14 @@ export default function SkuWorkbench() {
     window.location.href = "/api/skus/" + skuId + "/export";
   }
 
+  function handleSourcePaste(e) {
+    if (isEditablePasteTarget(e.target)) return;
+    const files = imageFilesFromClipboard(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    uploadSource(files);
+  }
+
   const node = nodes.find((n) => n.key === activeNode) || nodes[0];
 
   return (
@@ -391,7 +417,7 @@ export default function SkuWorkbench() {
       />
 
       <Card className="panel" title={<span className="panel-title"><IconImage /> {isMirror ? "商品图与全局提示词" : "产品图与提示词"}</span>}>
-        <div className="wb-product">
+        <div className="wb-product" tabIndex={0} onPaste={handleSourcePaste}>
           <div className="wb-thumbs">
             {sourceAssets.map((a) => (
               <div key={a.id} className="wb-thumb-shell">
@@ -446,8 +472,8 @@ export default function SkuWorkbench() {
             />
             <Text type="tertiary" size="small" style={{ display: "block", marginTop: 8 }}>
               {isMirror
-                ? "镜像模板会使用模板参考图、这张商品图、SKU 全局提示词和节点级重跑修正。"
-                : "普通 SKU 会使用产品图、SKU 名称、补充备注、通用一致性要求和重跑修正。"}
+                ? "镜像模板会使用模板参考图、这张商品图、SKU 全局提示词和节点级重跑修正。可直接 Ctrl+V 粘贴商品图。"
+                : "普通 SKU 会使用产品图、SKU 名称、补充备注、通用一致性要求和重跑修正。可直接 Ctrl+V 粘贴产品图。"}
             </Text>
           </div>
         </div>
@@ -562,14 +588,7 @@ function NodeStage({ node, busy, state, candidates, count, onCountChange, onAspe
     setRetry({ files: cur.filter((_, i) => i !== idx) });
   }
   function onRetryPaste(e) {
-    const items = (e.clipboardData && e.clipboardData.items) || [];
-    const files = [];
-    for (const item of items) {
-      if (item.kind === "file" && (item.type || "").startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) files.push(file);
-      }
-    }
+    const files = imageFilesFromClipboard(e.clipboardData);
     if (files.length) {
       e.preventDefault();
       addRetryImages(files);

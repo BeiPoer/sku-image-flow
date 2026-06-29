@@ -136,7 +136,7 @@ body {
 .sku-cover img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 .sku-cover-empty {
@@ -209,6 +209,13 @@ body {
   border-color: var(--semi-color-primary);
   background: var(--semi-color-primary-light-default);
 }
+.mirror-create:focus-visible,
+.mirror-image-list:focus-visible,
+.mirror-slice-panel:focus-visible,
+.wb-product:focus-visible {
+  outline: 2px solid var(--semi-color-primary);
+  outline-offset: 3px;
+}
 .mirror-create-grid {
   display: flex;
   flex-wrap: wrap;
@@ -226,7 +233,7 @@ body {
 .mirror-thumb img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 .mirror-thumb-x {
@@ -287,7 +294,7 @@ body {
   height: 88px;
   border-radius: var(--semi-border-radius-medium);
   border: 1px solid var(--semi-color-border);
-  object-fit: cover;
+  object-fit: contain;
   flex: 0 0 auto;
   cursor: zoom-in;
 }
@@ -298,6 +305,100 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+.mirror-slice-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px dashed transparent;
+  border-radius: var(--semi-border-radius-medium);
+  padding: 10px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.mirror-slice-panel.dragover {
+  border-color: var(--semi-color-primary);
+  background: var(--semi-color-primary-light-default);
+}
+.mirror-slice-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mirror-slice-source {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border: 1px solid var(--semi-color-border);
+  border-radius: var(--semi-border-radius-medium);
+  padding: 10px;
+  background: var(--semi-color-bg-1);
+}
+.mirror-slice-source-preview {
+  width: 112px;
+  height: 112px;
+  object-fit: contain;
+  border-radius: var(--semi-border-radius-medium);
+  border: 1px solid var(--semi-color-border);
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+.mirror-slice-source-preview:hover,
+.mirror-slice-source-preview:focus-visible {
+  border-color: var(--semi-color-primary);
+  opacity: 0.88;
+}
+.mirror-slice-source-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mirror-slice-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.mirror-slice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mirror-slice-thumb {
+  position: relative;
+  width: 74px;
+  height: 74px;
+  border-radius: var(--semi-border-radius-medium);
+  overflow: hidden;
+  border: 1px solid var(--semi-color-border);
+  background: var(--semi-color-fill-0);
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+.mirror-slice-thumb:hover,
+.mirror-slice-thumb:focus-visible {
+  border-color: var(--semi-color-primary);
+  opacity: 0.88;
+}
+.mirror-slice-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.mirror-slice-index {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  min-width: 24px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.56);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
 }
 
 /* ===== SKU 工作台 ===== */
@@ -323,7 +424,7 @@ body {
   width: 92px;
   height: 92px;
   border-radius: var(--semi-border-radius-medium);
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid var(--semi-color-border);
   cursor: zoom-in;
   transition: opacity 0.15s ease;
@@ -410,7 +511,7 @@ body {
   width: 24px;
   height: 24px;
   border-radius: var(--semi-border-radius-small);
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid var(--semi-color-border);
   flex: 0 0 auto;
 }
@@ -511,7 +612,7 @@ body {
 .wb-retry-thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .wb-retry-thumb { position: relative; width: 56px; height: 56px; }
 .wb-retry-thumb img {
-  width: 100%; height: 100%; object-fit: cover;
+  width: 100%; height: 100%; object-fit: contain;
   border-radius: var(--semi-border-radius-small);
   border: 1px solid var(--semi-color-border);
   cursor: zoom-in;
